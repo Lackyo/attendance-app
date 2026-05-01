@@ -134,7 +134,8 @@
 <div class="toast" id="toast"></div>
 
 <script>
-  const today = new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const today = new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString().split("T")[0];
 
   function switchTab(name) {
     ["today","ranking","monthly","admin","alias"].forEach((n, i) => {
