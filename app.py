@@ -82,11 +82,13 @@ def parse_kakao_message(text):
     return parsed_date, names
 
 def find_member_id(name, cur):
+    # 1단계 - 정확히 일치
     cur.execute("SELECT id FROM members WHERE name=%s", (name,))
     row = cur.fetchone()
     if row:
         return row[0]
-    cur.execute("SELECT id FROM members WHERE name LIKE %s", (f"%{name}%",))
+    # 2단계 - alias 매칭
+    cur.execute("SELECT member_id FROM aliases WHERE alias=%s", (name,))
     row = cur.fetchone()
     if row:
         return row[0]
@@ -128,6 +130,19 @@ def api_today():
         "count": len(present)
     })
 
+@app.route("/api/months")
+def api_months():
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT DISTINCT TO_CHAR(date, 'YYYY-MM') as ym FROM attendance ORDER BY ym")
+    months = [r["ym"] for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    if not months:
+        now = date.today()
+        months = [f"{now.year}-{now.month:02d}"]
+    return jsonify(months)
+
 @app.route("/api/monthly")
 def api_monthly():
     now = date.today()
@@ -160,6 +175,69 @@ def api_monthly():
         result.append({"name": m["name"], "count": len(dates), "dates": dates})
     result.sort(key=lambda x: -x["count"])
     return jsonify(result)
+
+@app.route("/api/aliases")
+def api_aliases():
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+                SELECT a.id, a.alias, m.name as member_name, m.id as member_id
+                FROM aliases a JOIN members m ON a.member_id = m.id
+                ORDER BY m.name, a.alias
+                """)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/aliases/add", methods=["POST"])
+def api_alias_add():
+    data = request.json
+    member_name = data.get("member_name", "").strip()
+    alias = data.get("alias", "").strip()
+    if not member_name or not alias:
+        return jsonify({"error": "멤버 이름과 alias를 입력해주세요"}), 400
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT id FROM members WHERE name=%s", (member_name,))
+    member = cur.fetchone()
+    if not member:
+        cur.close()
+        conn.close()
+        return jsonify({"error": f"멤버 '{member_name}'를 찾을 수 없어요"}), 404
+    try:
+        cur.execute("INSERT INTO aliases (member_id, alias) VALUES (%s, %s)", (member["id"], alias))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        cur.close()
+        conn.close()
+        return jsonify({"error": "이미 등록된 alias예요"}), 400
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/aliases/delete", methods=["POST"])
+def api_alias_delete():
+    data = request.json
+    alias_id = data.get("id")
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM aliases WHERE id=%s", (alias_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/members")
+def api_members():
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT id, name FROM members ORDER BY name")
+    members = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return jsonify(members)
 
 @app.route("/api/checkin", methods=["POST"])
 def api_checkin():
