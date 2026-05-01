@@ -189,6 +189,16 @@
     for (let d = 1; d <= daysInMonth; d++) html += `<th>${d}</th>`;
     html += "</tr></thead><tbody>";
 
+    // 일별 합계 계산
+    const dayCounts = {};
+    data.forEach(r => {
+      r.dates.forEach(dt => {
+        const day = parseInt(dt.split("-")[2]);
+        dayCounts[day] = (dayCounts[day] || 0) + 1;
+      });
+    });
+    const totalAll = data.reduce((s, r) => s + r.count, 0);
+
     data.forEach((r, i) => {
       const ds = new Set(r.dates);
       html += `<tr><td style="color:#aaa;font-size:11px">${i+1}</td><td>${r.name}</td><td style="font-weight:600;color:#1D9E75">${r.count}</td>`;
@@ -198,6 +208,17 @@
       }
       html += "</tr>";
     });
+
+    // 맨 아래 전체 합계 행
+    html += `<tr style="background:#FEE500;border-top:2px solid #D3D1C7">
+    <td style="font-weight:700;color:#2C2C2A;font-size:11px" colspan="2">일별 합계</td>
+    <td style="font-weight:700;color:#2C2C2A">${totalAll}</td>`;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const cnt = dayCounts[d] || 0;
+      html += `<td style="font-weight:700;color:#2C2C2A">${cnt || ''}</td>`;
+    }
+    html += "</tr>";
+
     html += "</tbody>";
     document.getElementById("monthly-tbl").innerHTML = html;
   }
