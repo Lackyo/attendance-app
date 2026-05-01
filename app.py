@@ -18,17 +18,17 @@ def init_db():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS members (
-            id SERIAL PRIMARY KEY,
-            name TEXT UNIQUE NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS attendance (
-            id SERIAL PRIMARY KEY,
-            member_id INTEGER REFERENCES members(id),
-            date DATE NOT NULL,
-            UNIQUE(member_id, date)
-        );
-    """)
+                CREATE TABLE IF NOT EXISTS members (
+                                                       id SERIAL PRIMARY KEY,
+                                                       name TEXT UNIQUE NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS attendance (
+                                                          id SERIAL PRIMARY KEY,
+                                                          member_id INTEGER REFERENCES members(id),
+                    date DATE NOT NULL,
+                    UNIQUE(member_id, date)
+                    );
+                """)
     members = [
         "계란","꽁치","노을","레오","무지","방장","새벽","제니","열심히행복","오운어",
         "요이","와치","유치원","이팀장","주이","코코아빠","화이밍","자본주의미소","체리",
@@ -42,22 +42,50 @@ def init_db():
     cur.close()
     conn.close()
 
+def remove_emoji(text):
+    emoji_pattern = re.compile("["
+                               u"\U0001F600-\U0001F64F"
+                               u"\U0001F300-\U0001F5FF"
+                               u"\U0001F680-\U0001F6FF"
+                               u"\U0001F1E0-\U0001F1FF"
+                               u"\U00002702-\U000027B0"
+                               u"\U000024C2-\U0001F251"
+                               u"\U0001f926-\U0001f937"
+                               u"\U00010000-\U0010ffff"
+                               u"\u2640-\u2642"
+                               u"\u2600-\u2B55"
+                               u"\u200d"
+                               u"\u23cf"
+                               u"\u23e9"
+                               u"\u231a"
+                               u"\ufe0f"
+                               u"\u3030"
+                               "]+", flags=re.UNICODE)
+    return emoji_pattern.sub('', text).strip()
+
 def parse_kakao_message(text):
-    date_match = re.search(r'(\d{2,4})[.\s]+(\d{1,2})[.\s]+(\d{1,2})', text)
-    if date_match:
-        y, m, d = date_match.groups()
-        if len(y) == 2:
-            y = "20" + y
-        parsed_date = f"{y}-{int(m):02d}-{int(d):02d}"
-    else:
-        parsed_date = date.today().isoformat()
+    lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
 
-    names_part = re.sub(r'\d{2,4}[.\s]+\d{1,2}[.\s]+\d{1,2}.*?출석부\s*', '', text)
-    if not names_part.strip():
-        names_part = text
+    # 첫 번째 줄에서 날짜 추출 (이모티콘 제거 후)
+    parsed_date = date.today().isoformat()
+    names_lines = lines
 
-    raw_names = [n.strip() for n in re.split(r'[,،、]', names_part) if n.strip()]
-    names = [n for n in raw_names if n and not re.match(r'^[\d\s().월화수목금토일]+$', n)]
+    if lines:
+        first_line = remove_emoji(lines[0])
+        date_match = re.search(r'(\d{2,4})[.\s]+(\d{1,2})[.\s]+(\d{1,2})', first_line)
+        if date_match:
+            y, m, d = date_match.groups()
+            if len(y) == 2:
+                y = "20" + y
+            parsed_date = f"{y}-{int(m):02d}-{int(d):02d}"
+            names_lines = lines[1:]  # 첫 줄 제외하고 나머지가 이름
+
+    # 둘째 줄부터 이름 파싱 (이모티콘 제거 후 콤마 구분)
+    names_text = ",".join(names_lines)
+    names_text = remove_emoji(names_text)
+    raw_names = [n.strip() for n in re.split(r'[,،、]', names_text) if n.strip()]
+    names = [n for n in raw_names if n and not re.match(r'^[\d\s().월화수목금토일(금)(월)(화)(수)(목)(토)(일)출석부]+$', n)]
+
     return parsed_date, names
 
 def find_member_id(name, cur):
@@ -87,10 +115,10 @@ def api_today():
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
-        SELECT m.name FROM attendance a
-        JOIN members m ON a.member_id = m.id
-        WHERE a.date = %s ORDER BY m.name
-    """, (target,))
+                SELECT m.name FROM attendance a
+                                       JOIN members m ON a.member_id = m.id
+                WHERE a.date = %s ORDER BY m.name
+                """, (target,))
     present = [r["name"] for r in cur.fetchall()]
 
     cur.execute("SELECT name FROM members ORDER BY name")
@@ -121,10 +149,10 @@ def api_monthly():
     members = cur.fetchall()
 
     cur.execute("""
-        SELECT m.name, a.date::text FROM attendance a
-        JOIN members m ON a.member_id = m.id
-        WHERE a.date >= %s AND a.date <= %s
-    """, (start, end))
+                SELECT m.name, a.date::text FROM attendance a
+                                                     JOIN members m ON a.member_id = m.id
+                WHERE a.date >= %s AND a.date <= %s
+                """, (start, end))
     records = cur.fetchall()
     cur.close()
     conn.close()
@@ -179,17 +207,17 @@ def api_share_text():
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
-        SELECT m.name FROM attendance a
-        JOIN members m ON a.member_id = m.id
-        WHERE a.date = %s ORDER BY m.name
-    """, (target,))
+                SELECT m.name FROM attendance a
+                                       JOIN members m ON a.member_id = m.id
+                WHERE a.date = %s ORDER BY m.name
+                """, (target,))
     present = cur.fetchall()
 
     cur.execute("""
-        SELECT m.name, COUNT(*) as cnt FROM attendance a
-        JOIN members m ON a.member_id = m.id
-        GROUP BY m.id, m.name ORDER BY cnt DESC LIMIT 3
-    """)
+                SELECT m.name, COUNT(*) as cnt FROM attendance a
+                                                        JOIN members m ON a.member_id = m.id
+                GROUP BY m.id, m.name ORDER BY cnt DESC LIMIT 3
+                """)
     top = cur.fetchall()
     cur.close()
     conn.close()
