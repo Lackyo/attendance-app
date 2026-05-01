@@ -1,0 +1,228 @@
+from flask import Flask, render_template, request, jsonify, send_file
+from datetime import datetime, date
+import os
+import re
+import psycopg2
+import psycopg2.extras
+from image_gen import generate_attendance_image
+
+app = Flask(__name__)
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+def get_db():
+    conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+    return conn
+
+def init_db():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS members (
+            id SERIAL PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS attendance (
+            id SERIAL PRIMARY KEY,
+            member_id INTEGER REFERENCES members(id),
+            date DATE NOT NULL,
+            UNIQUE(member_id, date)
+        );
+    """)
+    members = [
+        "계란","꽁치","노을","레오","무지","방장","새벽","제니","열심히행복","오운어",
+        "요이","와치","유치원","이팀장","주이","코코아빠","화이밍","자본주의미소","체리",
+        "sleep well","여우","홀트","가쥬아","스딩","김금삼","손라","아비노","차니",
+        "원판수집가","초코언니","스와","김철수","하급닌자","제츠이","딩딩","돈카스",
+        "제제","망하치","양재동","밥춘식","봉봉"
+    ]
+    for m in members:
+        cur.execute("INSERT INTO members (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (m,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def parse_kakao_message(text):
+    date_match = re.search(r'(\d{2,4})[.\s]+(\d{1,2})[.\s]+(\d{1,2})', text)
+    if date_match:
+        y, m, d = date_match.groups()
+        if len(y) == 2:
+            y = "20" + y
+        parsed_date = f"{y}-{int(m):02d}-{int(d):02d}"
+    else:
+        parsed_date = date.today().isoformat()
+
+    names_part = re.sub(r'\d{2,4}[.\s]+\d{1,2}[.\s]+\d{1,2}.*?출석부\s*', '', text)
+    if not names_part.strip():
+        names_part = text
+
+    raw_names = [n.strip() for n in re.split(r'[,،、]', names_part) if n.strip()]
+    names = [n for n in raw_names if n and not re.match(r'^[\d\s().월화수목금토일]+$', n)]
+    return parsed_date, names
+
+def find_member_id(name, cur):
+    cur.execute("SELECT id FROM members WHERE name=%s", (name,))
+    row = cur.fetchone()
+    if row:
+        return row[0]
+    cur.execute("SELECT id FROM members WHERE name LIKE %s", (f"%{name}%",))
+    row = cur.fetchone()
+    if row:
+        return row[0]
+    return None
+
+@app.route("/")
+def index():
+    today = date.today().isoformat()
+    return render_template("index.html", today=today)
+
+# UptimeRobot ping 엔드포인트 (슬립 방지)
+@app.route("/ping")
+def ping():
+    return "pong", 200
+
+@app.route("/api/today")
+def api_today():
+    target = request.args.get("date", date.today().isoformat())
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT m.name FROM attendance a
+        JOIN members m ON a.member_id = m.id
+        WHERE a.date = %s ORDER BY m.name
+    """, (target,))
+    present = [r["name"] for r in cur.fetchall()]
+
+    cur.execute("SELECT name FROM members ORDER BY name")
+    all_members = [r["name"] for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+
+    absent = [n for n in all_members if n not in present]
+    return jsonify({
+        "date": target,
+        "present": present,
+        "absent": absent,
+        "total": len(all_members),
+        "count": len(present)
+    })
+
+@app.route("/api/monthly")
+def api_monthly():
+    now = date.today()
+    year = int(request.args.get("year", now.year))
+    month = int(request.args.get("month", now.month))
+    start = f"{year}-{month:02d}-01"
+    end = f"{year}-{month:02d}-31"
+
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT id, name FROM members ORDER BY id")
+    members = cur.fetchall()
+
+    cur.execute("""
+        SELECT m.name, a.date::text FROM attendance a
+        JOIN members m ON a.member_id = m.id
+        WHERE a.date >= %s AND a.date <= %s
+    """, (start, end))
+    records = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    att_map = {}
+    for r in records:
+        att_map.setdefault(r["name"], set()).add(r["date"])
+
+    result = []
+    for m in members:
+        dates = sorted(att_map.get(m["name"], []))
+        result.append({"name": m["name"], "count": len(dates), "dates": dates})
+    result.sort(key=lambda x: -x["count"])
+    return jsonify(result)
+
+@app.route("/api/checkin", methods=["POST"])
+def api_checkin():
+    data = request.json
+    text = data.get("text", "")
+    parsed_date, names = parse_kakao_message(text)
+
+    conn = get_db()
+    cur = conn.cursor()
+    matched, unmatched = [], []
+    for name in names:
+        mid = find_member_id(name, cur)
+        if mid:
+            try:
+                cur.execute(
+                    "INSERT INTO attendance (member_id, date) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                    (mid, parsed_date)
+                )
+                matched.append(name)
+            except Exception as e:
+                unmatched.append(name)
+        else:
+            unmatched.append(name)
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    try:
+        generate_attendance_image(parsed_date)
+    except:
+        pass
+
+    return jsonify({"date": parsed_date, "matched": matched, "unmatched": unmatched})
+
+@app.route("/api/share-text")
+def api_share_text():
+    target = request.args.get("date", date.today().isoformat())
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT m.name FROM attendance a
+        JOIN members m ON a.member_id = m.id
+        WHERE a.date = %s ORDER BY m.name
+    """, (target,))
+    present = cur.fetchall()
+
+    cur.execute("""
+        SELECT m.name, COUNT(*) as cnt FROM attendance a
+        JOIN members m ON a.member_id = m.id
+        GROUP BY m.id, m.name ORDER BY cnt DESC LIMIT 3
+    """)
+    top = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    dt = datetime.strptime(target, "%Y-%m-%d")
+    weekdays = ["월","화","수","목","금","토","일"]
+    day_str = f"{dt.month}월 {dt.day}일({weekdays[dt.weekday()]})"
+    names_str = ", ".join([r["name"] for r in present])
+    top_str = " | ".join([f"{i+1}위 {r['name']} {r['cnt']}회" for i, r in enumerate(top)])
+
+    text = f"""📋 폭헬방 출석부 — {day_str}
+✅ 출석 {len(present)}명
+{names_str}
+
+🏆 누적 순위
+{top_str}
+
+🔗 전체 출석부: {os.environ.get('APP_URL', '')}"""
+    return jsonify({"text": text})
+
+@app.route("/og-image")
+def og_image():
+    target = request.args.get("date", date.today().isoformat())
+    path = f"static/og_{target}.png"
+    if not os.path.exists(path):
+        try:
+            generate_attendance_image(target)
+        except:
+            pass
+    if os.path.exists(path):
+        return send_file(path, mimetype="image/png")
+    return "", 404
+
+if __name__ == "__main__":
+    init_db()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
