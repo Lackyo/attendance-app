@@ -4,32 +4,19 @@ import os
 import re
 import psycopg2
 import psycopg2.extras
-from psycopg2 import pool
 from image_gen import generate_attendance_image
 
 app = Flask(__name__)
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# 커넥션 풀 (최소 1개, 최대 10개 연결 재사용)
-connection_pool = None
-
-def init_pool():
-    global connection_pool
-    connection_pool = pool.ThreadedConnectionPool(
-        1, 10,
-        DATABASE_URL,
-        sslmode="require"
-    )
-
 def get_db():
-    return connection_pool.getconn()
+    return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 def release_db(conn):
-    connection_pool.putconn(conn)
+    conn.close()
 
 def init_db():
-    init_pool()
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
