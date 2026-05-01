@@ -1,59 +1,59 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta property="og:title" content="폭헬방 출석부 🏋️">
-<meta property="og:description" id="og-desc" content="오늘 출석 현황을 확인하세요">
-<meta property="og:image" content="/og-image">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="폭헬방 출석부">
-<title>폭헬방 출석부</title>
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, 'Apple SD Gothic Neo', 'Nanum Gothic', sans-serif; background: #f5f4f0; color: #2c2c2a; min-height: 100vh; }
-.header { background: #FEE500; padding: 16px 20px; }
-.header h1 { font-size: 18px; font-weight: 700; }
-.header .date { font-size: 13px; color: #555; margin-top: 2px; }
-.tabs { display: flex; background: #fff; border-bottom: 1px solid #e8e7e3; position: sticky; top: 0; z-index: 10; }
-.tab { flex: 1; text-align: center; padding: 12px 0; font-size: 14px; color: #888; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
-.tab.active { color: #1D9E75; border-bottom-color: #1D9E75; font-weight: 600; }
-.content { display: none; padding: 16px; max-width: 600px; margin: 0 auto; }
-.content.active { display: block; }
-.stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
-.stat-box { background: #fff; border-radius: 10px; padding: 12px; text-align: center; }
-.stat-n { font-size: 26px; font-weight: 700; color: #1D9E75; }
-.stat-l { font-size: 11px; color: #888; margin-top: 2px; }
-.card { background: #fff; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
-.sec-title { font-size: 13px; font-weight: 600; color: #888; margin-bottom: 10px; }
-.chip-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip { background: #E1F5EE; color: #085041; font-size: 13px; padding: 5px 11px; border-radius: 20px; }
-.chip.absent { background: #f1efe8; color: #888; }
-.share-btn { width: 100%; padding: 14px; background: #FEE500; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; color: #2c2c2a; cursor: pointer; margin-top: 4px; }
-.share-btn:active { opacity: 0.8; transform: scale(0.98); }
-.paste-area { width: 100%; height: 130px; border: 1.5px solid #e8e7e3; border-radius: 10px; padding: 12px; font-size: 14px; resize: none; font-family: inherit; background: #fafaf8; }
-.paste-area:focus { outline: none; border-color: #1D9E75; }
-.submit-btn { width: 100%; margin-top: 8px; padding: 13px; background: #1D9E75; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; color: #fff; cursor: pointer; }
-.submit-btn:active { opacity: 0.85; }
-.result-box { margin-top: 10px; padding: 12px 14px; background: #E1F5EE; border-radius: 10px; font-size: 13px; line-height: 1.8; display: none; }
-.rank-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid #f1efe8; }
-.rank-row:last-child { border-bottom: none; }
-.rank-num { font-size: 13px; color: #aaa; width: 22px; text-align: center; }
-.rank-medal { font-size: 16px; width: 22px; text-align: center; }
-.rank-name { font-size: 14px; flex: 1; font-weight: 500; }
-.rank-bar-wrap { width: 90px; background: #f1efe8; border-radius: 4px; height: 6px; }
-.rank-bar { height: 6px; border-radius: 4px; background: #1D9E75; transition: width 0.5s ease; }
-.rank-cnt { font-size: 13px; color: #666; width: 36px; text-align: right; }
-.monthly-wrap { overflow-x: auto; }
-.monthly-tbl { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
-.monthly-tbl th, .monthly-tbl td { border: 0.5px solid #e8e7e3; padding: 5px 4px; text-align: center; }
-.monthly-tbl th { background: #f5f4f0; font-weight: 500; color: #666; position: sticky; top: 0; }
-.monthly-tbl td:first-child { text-align: left; padding-left: 8px; font-size: 12px; position: sticky; left: 0; background: #fff; }
-.o-mark { color: #1D9E75; font-weight: 700; }
-.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2c2c2a; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100; white-space: nowrap; }
-.toast.show { opacity: 1; }
-.empty { color: #bbb; font-size: 13px; padding: 4px 0; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta property="og:title" content="폭헬방 출석부 🏋️">
+  <meta property="og:description" id="og-desc" content="오늘 출석 현황을 확인하세요">
+  <meta property="og:image" content="/og-image">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="폭헬방 출석부">
+  <title>폭헬방 출석부</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, 'Apple SD Gothic Neo', 'Nanum Gothic', sans-serif; background: #f5f4f0; color: #2c2c2a; min-height: 100vh; }
+    .header { background: #FEE500; padding: 16px 20px; }
+    .header h1 { font-size: 18px; font-weight: 700; }
+    .header .date { font-size: 13px; color: #555; margin-top: 2px; }
+    .tabs { display: flex; background: #fff; border-bottom: 1px solid #e8e7e3; position: sticky; top: 0; z-index: 10; }
+    .tab { flex: 1; text-align: center; padding: 12px 0; font-size: 14px; color: #888; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+    .tab.active { color: #1D9E75; border-bottom-color: #1D9E75; font-weight: 600; }
+    .content { display: none; padding: 16px; max-width: 600px; margin: 0 auto; }
+    .content.active { display: block; }
+    .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+    .stat-box { background: #fff; border-radius: 10px; padding: 12px; text-align: center; }
+    .stat-n { font-size: 26px; font-weight: 700; color: #1D9E75; }
+    .stat-l { font-size: 11px; color: #888; margin-top: 2px; }
+    .card { background: #fff; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+    .sec-title { font-size: 13px; font-weight: 600; color: #888; margin-bottom: 10px; }
+    .chip-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { background: #E1F5EE; color: #085041; font-size: 13px; padding: 5px 11px; border-radius: 20px; }
+    .chip.absent { background: #f1efe8; color: #888; }
+    .share-btn { width: 100%; padding: 14px; background: #FEE500; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; color: #2c2c2a; cursor: pointer; margin-top: 4px; }
+    .share-btn:active { opacity: 0.8; transform: scale(0.98); }
+    .paste-area { width: 100%; height: 130px; border: 1.5px solid #e8e7e3; border-radius: 10px; padding: 12px; font-size: 14px; resize: none; font-family: inherit; background: #fafaf8; }
+    .paste-area:focus { outline: none; border-color: #1D9E75; }
+    .submit-btn { width: 100%; margin-top: 8px; padding: 13px; background: #1D9E75; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; color: #fff; cursor: pointer; }
+    .submit-btn:active { opacity: 0.85; }
+    .result-box { margin-top: 10px; padding: 12px 14px; background: #E1F5EE; border-radius: 10px; font-size: 13px; line-height: 1.8; display: none; }
+    .rank-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid #f1efe8; }
+    .rank-row:last-child { border-bottom: none; }
+    .rank-num { font-size: 13px; color: #aaa; width: 22px; text-align: center; }
+    .rank-medal { font-size: 16px; width: 22px; text-align: center; }
+    .rank-name { font-size: 14px; flex: 1; font-weight: 500; }
+    .rank-bar-wrap { width: 90px; background: #f1efe8; border-radius: 4px; height: 6px; }
+    .rank-bar { height: 6px; border-radius: 4px; background: #1D9E75; transition: width 0.5s ease; }
+    .rank-cnt { font-size: 13px; color: #666; width: 36px; text-align: right; }
+    .monthly-wrap { overflow-x: auto; }
+    .monthly-tbl { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
+    .monthly-tbl th, .monthly-tbl td { border: 0.5px solid #e8e7e3; padding: 5px 4px; text-align: center; }
+    .monthly-tbl th { background: #f5f4f0; font-weight: 500; color: #666; position: sticky; top: 0; }
+    .monthly-tbl td:first-child { text-align: left; padding-left: 8px; font-size: 12px; position: sticky; left: 0; background: #fff; }
+    .o-mark { color: #1D9E75; font-weight: 700; }
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2c2c2a; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100; white-space: nowrap; }
+    .toast.show { opacity: 1; }
+    .empty { color: #bbb; font-size: 13px; padding: 4px 0; }
+  </style>
 </head>
 <body>
 <div class="header">
@@ -93,7 +93,7 @@ body { font-family: -apple-system, 'Apple SD Gothic Neo', 'Nanum Gothic', sans-s
 
 <div class="content" id="tab-monthly">
   <div class="card">
-    <div class="sec-title" style="margin-bottom:10px">📅 월간 전체 출석표</div>
+    <div class="sec-title" style="margin-bottom:10px">📅 <span id="monthly-title">월간 전체 출석표</span></div>
     <div class="monthly-wrap">
       <table class="monthly-tbl" id="monthly-tbl"></table>
     </div>
@@ -124,48 +124,48 @@ body { font-family: -apple-system, 'Apple SD Gothic Neo', 'Nanum Gothic', sans-s
 <div class="toast" id="toast"></div>
 
 <script>
-const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toISOString().split("T")[0];
 
-function switchTab(name) {
-  ["today","ranking","monthly","admin"].forEach((n, i) => {
-    document.querySelectorAll(".tab")[i].classList.toggle("active", n === name);
-    document.getElementById("tab-" + n).classList.toggle("active", n === name);
-  });
-  if (name === "ranking") loadRanking();
-  if (name === "monthly") loadMonthly();
-}
+  function switchTab(name) {
+    ["today","ranking","monthly","admin"].forEach((n, i) => {
+      document.querySelectorAll(".tab")[i].classList.toggle("active", n === name);
+      document.getElementById("tab-" + n).classList.toggle("active", n === name);
+    });
+    if (name === "ranking") loadRanking();
+    if (name === "monthly") loadMonthly();
+  }
 
-function showToast(msg) {
-  const t = document.getElementById("toast");
-  t.textContent = msg;
-  t.classList.add("show");
-  setTimeout(() => t.classList.remove("show"), 2500);
-}
+  function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2500);
+  }
 
-async function loadToday() {
-  const res = await fetch(`/api/today?date=${today}`);
-  const d = await res.json();
-  const dt = new Date(today + "T00:00:00");
-  const days = ["일","월","화","수","목","금","토"];
-  document.getElementById("header-date").textContent =
-    `${dt.getMonth()+1}월 ${dt.getDate()}일(${days[dt.getDay()]})`;
-  document.getElementById("s-count").textContent = d.count;
-  document.getElementById("s-total").textContent = d.total;
-  document.getElementById("s-rate").textContent = Math.round(d.count / d.total * 100) + "%";
-  document.getElementById("present-cnt").textContent = d.count;
-  document.getElementById("absent-cnt").textContent = d.absent.length;
-  document.getElementById("present-list").innerHTML =
-    d.present.length ? d.present.map(n => `<span class="chip">${n}</span>`).join("") : '<span class="empty">아직 없음</span>';
-  document.getElementById("absent-list").innerHTML =
-    d.absent.map(n => `<span class="chip absent">${n}</span>`).join("");
-}
+  async function loadToday() {
+    const res = await fetch(`/api/today?date=${today}`);
+    const d = await res.json();
+    const dt = new Date(today + "T00:00:00");
+    const days = ["일","월","화","수","목","금","토"];
+    document.getElementById("header-date").textContent =
+            `${dt.getMonth()+1}월 ${dt.getDate()}일(${days[dt.getDay()]})`;
+    document.getElementById("s-count").textContent = d.count;
+    document.getElementById("s-total").textContent = d.total;
+    document.getElementById("s-rate").textContent = Math.round(d.count / d.total * 100) + "%";
+    document.getElementById("present-cnt").textContent = d.count;
+    document.getElementById("absent-cnt").textContent = d.absent.length;
+    document.getElementById("present-list").innerHTML =
+            d.present.length ? d.present.map(n => `<span class="chip">${n}</span>`).join("") : '<span class="empty">아직 없음</span>';
+    document.getElementById("absent-list").innerHTML =
+            d.absent.map(n => `<span class="chip absent">${n}</span>`).join("");
+  }
 
-async function loadRanking() {
-  const res = await fetch("/api/monthly");
-  const data = await res.json();
-  const max = data[0]?.count || 1;
-  const medals = ["🥇","🥈","🥉"];
-  document.getElementById("ranking-list").innerHTML = data.map((r, i) => `
+  async function loadRanking() {
+    const res = await fetch("/api/monthly");
+    const data = await res.json();
+    const max = data[0]?.count || 1;
+    const medals = ["🥇","🥈","🥉"];
+    document.getElementById("ranking-list").innerHTML = data.map((r, i) => `
     <div class="rank-row">
       <div class="${i < 3 ? 'rank-medal' : 'rank-num'}">${i < 3 ? medals[i] : i+1}</div>
       <div class="rank-name">${r.name}</div>
@@ -173,68 +173,70 @@ async function loadRanking() {
       <div class="rank-cnt">${r.count}회</div>
     </div>
   `).join("");
-}
-
-async function loadMonthly() {
-  const now = new Date();
-  const res = await fetch(`/api/monthly?year=${now.getFullYear()}&month=${now.getMonth()+1}`);
-  const data = await res.json();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
-  const m = String(now.getMonth()+1).padStart(2,"0");
-  const y = now.getFullYear();
-
-  let html = "<thead><tr><th>이름</th><th>계</th>";
-  for (let d = 1; d <= daysInMonth; d++) html += `<th>${d}</th>`;
-  html += "</tr></thead><tbody>";
-
-  data.forEach(r => {
-    const ds = new Set(r.dates);
-    html += `<tr><td>${r.name}</td><td style="font-weight:600;color:#1D9E75">${r.count}</td>`;
-    for (let d = 1; d <= daysInMonth; d++) {
-      const key = `${y}-${m}-${String(d).padStart(2,"0")}`;
-      html += `<td>${ds.has(key) ? '<span class="o-mark">O</span>' : ''}</td>`;
-    }
-    html += "</tr>";
-  });
-  html += "</tbody>";
-  document.getElementById("monthly-tbl").innerHTML = html;
-}
-
-async function shareToKakao() {
-  const res = await fetch(`/api/share-text?date=${today}`);
-  const d = await res.json();
-  if (navigator.share) {
-    navigator.share({ text: d.text });
-  } else {
-    await navigator.clipboard.writeText(d.text);
-    showToast("✅ 클립보드에 복사됐어요! 카톡에 붙여넣기 하세요");
   }
-}
 
-async function submitAttendance() {
-  const text = document.getElementById("kakao-text").value.trim();
-  if (!text) return showToast("메시지를 붙여넣어 주세요");
-  const btn = document.querySelector(".submit-btn");
-  btn.textContent = "등록 중...";
-  btn.disabled = true;
-  const res = await fetch("/api/checkin", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({text})
-  });
-  const d = await res.json();
-  btn.textContent = "✅ 출석 등록하기";
-  btn.disabled = false;
-  const box = document.getElementById("result-box");
-  box.style.display = "block";
-  box.innerHTML = `<b>📅 ${d.date} 출석 등록 완료!</b><br>
+  async function loadMonthly() {
+    const now = new Date();
+    const res = await fetch(`/api/monthly?year=${now.getFullYear()}&month=${now.getMonth()+1}`);
+    const data = await res.json();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+    const m = String(now.getMonth()+1).padStart(2,"0");
+    const y = now.getFullYear();
+
+    document.getElementById("monthly-title").textContent = `${now.getMonth()+1}월 전체 출석표`;
+
+    let html = "<thead><tr><th>No</th><th>이름</th><th>계</th>";
+    for (let d = 1; d <= daysInMonth; d++) html += `<th>${d}</th>`;
+    html += "</tr></thead><tbody>";
+
+    data.forEach((r, i) => {
+      const ds = new Set(r.dates);
+      html += `<tr><td style="color:#aaa;font-size:11px">${i+1}</td><td>${r.name}</td><td style="font-weight:600;color:#1D9E75">${r.count}</td>`;
+      for (let d = 1; d <= daysInMonth; d++) {
+        const key = `${y}-${m}-${String(d).padStart(2,"0")}`;
+        html += `<td>${ds.has(key) ? '<span class="o-mark">O</span>' : ''}</td>`;
+      }
+      html += "</tr>";
+    });
+    html += "</tbody>";
+    document.getElementById("monthly-tbl").innerHTML = html;
+  }
+
+  async function shareToKakao() {
+    const res = await fetch(`/api/share-text?date=${today}`);
+    const d = await res.json();
+    if (navigator.share) {
+      navigator.share({ text: d.text });
+    } else {
+      await navigator.clipboard.writeText(d.text);
+      showToast("✅ 클립보드에 복사됐어요! 카톡에 붙여넣기 하세요");
+    }
+  }
+
+  async function submitAttendance() {
+    const text = document.getElementById("kakao-text").value.trim();
+    if (!text) return showToast("메시지를 붙여넣어 주세요");
+    const btn = document.querySelector(".submit-btn");
+    btn.textContent = "등록 중...";
+    btn.disabled = true;
+    const res = await fetch("/api/checkin", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({text})
+    });
+    const d = await res.json();
+    btn.textContent = "✅ 출석 등록하기";
+    btn.disabled = false;
+    const box = document.getElementById("result-box");
+    box.style.display = "block";
+    box.innerHTML = `<b>📅 ${d.date} 출석 등록 완료!</b><br>
     ✅ ${d.matched.length}명 등록: ${d.matched.join(", ")}
     ${d.unmatched.length ? `<br>⚠️ 못 찾은 이름: ${d.unmatched.join(", ")}` : ""}`;
-  loadToday();
-  showToast(`${d.matched.length}명 출석 등록 완료!`);
-}
+    loadToday();
+    showToast(`${d.matched.length}명 출석 등록 완료!`);
+  }
 
-loadToday();
+  loadToday();
 </script>
 </body>
 </html>
