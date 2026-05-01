@@ -49,17 +49,10 @@ def remove_emoji(text):
                                u"\U0001F680-\U0001F6FF"
                                u"\U0001F1E0-\U0001F1FF"
                                u"\U00002702-\U000027B0"
-                               u"\U000024C2-\U0001F251"
                                u"\U0001f926-\U0001f937"
-                               u"\U00010000-\U0010ffff"
-                               u"\u2640-\u2642"
-                               u"\u2600-\u2B55"
-                               u"\u200d"
-                               u"\u23cf"
-                               u"\u23e9"
-                               u"\u231a"
-                               u"\ufe0f"
-                               u"\u3030"
+                               u"\U0001fa00-\U0001fa9f"
+                               u"\u2600-\u26FF"
+                               u"\u2700-\u27BF"
                                "]+", flags=re.UNICODE)
     return emoji_pattern.sub('', text).strip()
 
