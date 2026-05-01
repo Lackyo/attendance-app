@@ -69,6 +69,7 @@
   <div class="tab" onclick="switchTab('ranking')">랭킹</div>
   <div class="tab" onclick="switchTab('monthly')">전체표</div>
   <div class="tab" onclick="switchTab('admin')">출석입력</div>
+  <div class="tab" onclick="switchTab('alias')">별명관리</div>
 </div>
 
 <div class="content active" id="tab-today">
@@ -115,15 +116,18 @@
     <button class="submit-btn" onclick="submitAttendance()">✅ 출석 등록하기</button>
     <div class="result-box" id="result-box"></div>
   </div>
-  <div class="card" style="margin-top:0">
-    <div class="sec-title" style="margin-bottom:4px">💡 사용법</div>
-    <div style="font-size:13px; color:#666; line-height:1.8">
-      1. 카카오톡 출석 메시지 복사<br>
-      2. 위 텍스트 영역에 붙여넣기<br>
-      3. "출석 등록하기" 버튼 클릭<br>
-      4. "오늘" 탭에서 현황 확인<br>
-      5. 공유 버튼으로 카톡방에 전송
+</div>
+
+<div class="content" id="tab-alias">
+  <div class="card">
+    <div class="sec-title" style="margin-bottom:12px">🏷️ 별명 추가</div>
+    <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+      <select id="alias-member-select" style="flex:1;min-width:100px;padding:9px;border:1.5px solid #e8e7e3;border-radius:8px;font-size:13px;background:#fff;color:#2c2c2a;"></select>
+      <input id="alias-input" type="text" placeholder="별명 입력 (예: 재동)" style="flex:1;min-width:100px;padding:9px;border:1.5px solid #e8e7e3;border-radius:8px;font-size:13px;">
+      <button onclick="addAlias()" style="padding:9px 16px;background:#1D9E75;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">추가</button>
     </div>
+    <div style="font-size:12px;color:#aaa;margin-bottom:12px">"재동" 입력 시 "양재동"으로 자동 인식돼요</div>
+    <div id="alias-list"></div>
   </div>
 </div>
 
@@ -133,12 +137,13 @@
   const today = new Date().toISOString().split("T")[0];
 
   function switchTab(name) {
-    ["today","ranking","monthly","admin"].forEach((n, i) => {
+    ["today","ranking","monthly","admin","alias"].forEach((n, i) => {
       document.querySelectorAll(".tab")[i].classList.toggle("active", n === name);
       document.getElementById("tab-" + n).classList.toggle("active", n === name);
     });
     if (name === "ranking") loadRanking();
     if (name === "monthly") loadMonthly();
+    if (name === "alias") loadAliases();
   }
 
   function showToast(msg) {
@@ -303,6 +308,71 @@
   }
 
   loadToday();
+
+  async function loadAliases() {
+    // 멤버 드랍다운
+    const mres = await fetch("/api/members");
+    const members = await mres.json();
+    const sel = document.getElementById("alias-member-select");
+    sel.innerHTML = members.map(m => `<option value="${m.name}">${m.name}</option>`).join("");
+
+    // alias 목록
+    const ares = await fetch("/api/aliases");
+    const aliases = await ares.json();
+    const listEl = document.getElementById("alias-list");
+
+    if (!aliases.length) {
+      listEl.innerHTML = '<div style="font-size:13px;color:#aaa;padding:4px 0">등록된 alias 없음</div>';
+      return;
+    }
+
+    // 멤버별 그룹
+    const grouped = {};
+    aliases.forEach(a => {
+      if (!grouped[a.member_name]) grouped[a.member_name] = [];
+      grouped[a.member_name].push(a);
+    });
+
+    listEl.innerHTML = Object.entries(grouped).map(([name, list]) => `
+    <div style="margin-bottom:10px">
+      <div style="font-size:12px;font-weight:600;color:#2c2c2a;margin-bottom:4px">${name}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">
+        ${list.map(a => `
+          <span style="background:#f1efe8;padding:4px 10px;border-radius:20px;font-size:12px;color:#444;display:flex;align-items:center;gap:5px">
+            ${a.alias}
+            <button onclick="deleteAlias(${a.id})" style="background:none;border:none;color:#aaa;cursor:pointer;font-size:14px;padding:0;line-height:1">×</button>
+          </span>
+        `).join("")}
+      </div>
+    </div>
+  `).join("");
+  }
+
+  async function addAlias() {
+    const member_name = document.getElementById("alias-member-select").value;
+    const alias = document.getElementById("alias-input").value.trim();
+    if (!alias) return showToast("별명을 입력해주세요");
+    const res = await fetch("/api/aliases/add", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({member_name, alias})
+    });
+    const d = await res.json();
+    if (d.error) return showToast("❌ " + d.error);
+    document.getElementById("alias-input").value = "";
+    showToast(`✅ ${member_name} → "${alias}" 추가됐어요`);
+    loadAliases();
+  }
+
+  async function deleteAlias(id) {
+    await fetch("/api/aliases/delete", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({id})
+    });
+    showToast("삭제됐어요");
+    loadAliases();
+  }
 </script>
 </body>
 </html>
