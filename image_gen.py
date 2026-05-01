@@ -14,17 +14,17 @@ def generate_attendance_image(target_date=None):
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cur.execute("""
-        SELECT m.name FROM attendance a
-        JOIN members m ON a.member_id = m.id
-        WHERE a.date = %s ORDER BY m.name
-    """, (target_date,))
+                SELECT m.name FROM attendance a
+                                       JOIN members m ON a.member_id = m.id
+                WHERE a.date = %s ORDER BY m.name
+                """, (target_date,))
     present = [r["name"] for r in cur.fetchall()]
 
     cur.execute("""
-        SELECT m.name, COUNT(*) as cnt FROM attendance a
-        JOIN members m ON a.member_id = m.id
-        GROUP BY m.id, m.name ORDER BY cnt DESC LIMIT 3
-    """)
+                SELECT m.name, COUNT(*) as cnt FROM attendance a
+                                                        JOIN members m ON a.member_id = m.id
+                GROUP BY m.id, m.name ORDER BY cnt DESC LIMIT 3
+                """)
     top3 = cur.fetchall()
 
     cur.execute("SELECT COUNT(*) as c FROM members")
@@ -33,64 +33,39 @@ def generate_attendance_image(target_date=None):
     conn.close()
 
     W, H = 800, 420
-    img = Image.new("RGB", (W, H), (255, 255, 255))
-    draw = ImageDraw.Draw(img)
-
     YELLOW = (254, 229, 0)
     DARK = (44, 44, 42)
-    GREEN = (29, 158, 117)
-    GRAY = (136, 135, 128)
-    LIGHT = (241, 239, 232)
+    GRAY = (95, 94, 90)
+    LIGHT_GRAY = (211, 209, 199)
+    MUTED = (180, 178, 169)
 
-    draw.rectangle([0, 0, W, 70], fill=YELLOW)
+    img = Image.new("RGB", (W, H), YELLOW)
+    draw = ImageDraw.Draw(img)
 
     try:
-        font_lg = ImageFont.truetype("/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf", 28)
-        font_md = ImageFont.truetype("/usr/share/fonts/truetype/nanum/NanumGothic.ttf", 20)
-        font_sm = ImageFont.truetype("/usr/share/fonts/truetype/nanum/NanumGothic.ttf", 16)
-        font_nm = ImageFont.truetype("/usr/share/fonts/truetype/nanum/NanumGothic.ttf", 17)
+        font_sub  = ImageFont.truetype("/usr/share/fonts/truetype/nanum/NanumGothic.ttf", 22)
+        font_date = ImageFont.truetype("/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf", 72)
+        font_mid  = ImageFont.truetype("/usr/share/fonts/truetype/nanum/NanumGothic.ttf", 24)
+        font_rank = ImageFont.truetype("/usr/share/fonts/truetype/nanum/NanumGothic.ttf", 16)
+        font_url  = ImageFont.truetype("/usr/share/fonts/truetype/nanum/NanumGothic.ttf", 13)
     except:
-        font_lg = font_md = font_sm = font_nm = ImageFont.load_default()
+        font_sub = font_date = font_mid = font_rank = font_url = ImageFont.load_default()
 
     dt = datetime.strptime(target_date, "%Y-%m-%d")
     weekdays = ["월","화","수","목","금","토","일"]
-    date_str = f"{dt.year}년 {dt.month}월 {dt.day}일({weekdays[dt.weekday()]})"
 
-    draw.text((24, 14), "폭헬방 출석부 🏋️", fill=DARK, font=font_lg)
-    draw.text((24, 46), date_str, fill=DARK, font=font_sm)
+    draw.text((60, 100), "폭헬방 출석부", fill=GRAY, font=font_sub)
+    date_str = f"{dt.month}월 {dt.day}일({weekdays[dt.weekday()]})"
+    draw.text((60, 138), date_str, fill=DARK, font=font_date)
+    draw.text((60, 242), f"오늘 출석 {len(present)}명 / 전체 {total}명", fill=(68, 68, 65), font=font_mid)
+    draw.rectangle([60, 282, 740, 284], fill=LIGHT_GRAY)
 
-    draw.rounded_rectangle([W-160, 10, W-20, 60], radius=10, fill=DARK)
-    draw.text((W-148, 16), "출석", fill=YELLOW, font=font_sm)
-    draw.text((W-112, 10), str(len(present)), fill=YELLOW, font=font_lg)
-    draw.text((W-76, 30), f"/ {total}명", fill=GRAY, font=font_sm)
+    if top3:
+        rank_parts = [f"{i+1}위 {r['name']} {r['cnt']}회" for i, r in enumerate(top3)]
+        draw.text((60, 300), "  ·  ".join(rank_parts), fill=GRAY, font=font_rank)
 
-    draw.text((24, 88), "✅ 오늘 출석", fill=GREEN, font=font_md)
-
-    x, y = 24, 120
-    for name in present:
-        bbox = draw.textbbox((0, 0), name, font=font_nm)
-        tw = bbox[2] - bbox[0]
-        tag_w = tw + 24
-        if x + tag_w > W - 24:
-            x = 24
-            y += 38
-        if y > 255:
-            remaining = len(present) - present.index(name)
-            draw.text((x, y + 4), f"+{remaining}명 더", fill=GRAY, font=font_sm)
-            break
-        draw.rounded_rectangle([x, y, x + tag_w, y + 30], radius=6, fill=LIGHT)
-        draw.text((x + 12, y + 6), name, fill=DARK, font=font_nm)
-        x += tag_w + 6
-
-    draw.rectangle([24, 292, W - 24, 293], fill=LIGHT)
-    draw.text((24, 302), "🏆 누적 순위", fill=DARK, font=font_md)
-
-    medals = ["1위", "2위", "3위"]
-    for i, r in enumerate(top3):
-        bx = 24 + i * 258
-        draw.rounded_rectangle([bx, 330, bx + 244, 390], radius=8, fill=LIGHT)
-        draw.text((bx + 12, 338), f"{medals[i]} {r['name']}", fill=DARK, font=font_md)
-        draw.text((bx + 12, 364), f"{r['cnt']}회 출석", fill=GREEN, font=font_sm)
+    app_url = os.environ.get("APP_URL", "attendance-app.onrender.com").replace("https://", "")
+    draw.text((60, 378), app_url, fill=MUTED, font=font_url)
 
     os.makedirs("static", exist_ok=True)
     path = f"static/og_{target_date}.png"
