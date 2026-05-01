@@ -16,7 +16,7 @@
     .header h1 { font-size: 18px; font-weight: 700; }
     .header .date { font-size: 13px; color: #555; margin-top: 2px; }
     .tabs { display: flex; background: #fff; border-bottom: 1px solid #e8e7e3; position: sticky; top: 0; z-index: 10; }
-    .tab { flex: 1; text-align: center; padding: 12px 0; font-size: 14px; color: #888; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+    .tab { flex: 1; text-align: center; padding: 11px 2px; font-size: 12px; color: #888; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
     .tab.active { color: #1D9E75; border-bottom-color: #1D9E75; font-weight: 600; }
     .content { display: none; padding: 16px; max-width: 600px; margin: 0 auto; }
     .content.active { display: block; }
@@ -313,19 +313,25 @@
   loadToday();
 
   async function loadAliases() {
-    // 멤버 드랍다운
-    const mres = await fetch("/api/members");
+    const [mres, ares] = await Promise.all([
+      fetch("/api/members"),
+      fetch("/api/aliases")
+    ]);
     const members = await mres.json();
+    const aliases = await ares.json();
+
+    // 멤버 드랍다운
     const sel = document.getElementById("alias-member-select");
-    sel.innerHTML = members.map(m => `<option value="${m.name}">${m.name}</option>`).join("");
+    if (sel) {
+      sel.innerHTML = members.map(m => `<option value="${m.name}">${m.name}</option>`).join("");
+    }
 
     // alias 목록
-    const ares = await fetch("/api/aliases");
-    const aliases = await ares.json();
     const listEl = document.getElementById("alias-list");
+    if (!listEl) return;
 
     if (!aliases.length) {
-      listEl.innerHTML = '<div style="font-size:13px;color:#aaa;padding:4px 0">등록된 alias 없음</div>';
+      listEl.innerHTML = '<div style="font-size:13px;color:#aaa;padding:8px 0">등록된 별명 없음</div>';
       return;
     }
 
@@ -337,13 +343,13 @@
     });
 
     listEl.innerHTML = Object.entries(grouped).map(([name, list]) => `
-    <div style="margin-bottom:10px">
-      <div style="font-size:12px;font-weight:600;color:#2c2c2a;margin-bottom:4px">${name}</div>
+    <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f1efe8">
+      <div style="font-size:13px;font-weight:600;color:#2c2c2a;margin-bottom:6px">${name}</div>
       <div style="display:flex;flex-wrap:wrap;gap:5px">
         ${list.map(a => `
-          <span style="background:#f1efe8;padding:4px 10px;border-radius:20px;font-size:12px;color:#444;display:flex;align-items:center;gap:5px">
+          <span style="background:#E1F5EE;padding:5px 10px;border-radius:20px;font-size:13px;color:#085041;display:flex;align-items:center;gap:6px">
             ${a.alias}
-            <button onclick="deleteAlias(${a.id})" style="background:none;border:none;color:#aaa;cursor:pointer;font-size:14px;padding:0;line-height:1">×</button>
+            <button onclick="deleteAlias(${a.id})" style="background:none;border:none;color:#aaa;cursor:pointer;font-size:15px;padding:0;line-height:1">×</button>
           </span>
         `).join("")}
       </div>
