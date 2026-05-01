@@ -44,11 +44,15 @@
     .rank-bar-wrap { width: 90px; background: #f1efe8; border-radius: 4px; height: 6px; }
     .rank-bar { height: 6px; border-radius: 4px; background: #1D9E75; transition: width 0.5s ease; }
     .rank-cnt { font-size: 13px; color: #666; width: 36px; text-align: right; }
-    .monthly-wrap { overflow-x: auto; }
+    .monthly-wrap { overflow: auto; max-height: 70vh; }
     .monthly-tbl { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
     .monthly-tbl th, .monthly-tbl td { border: 0.5px solid #e8e7e3; padding: 5px 4px; text-align: center; }
-    .monthly-tbl th { background: #f5f4f0; font-weight: 500; color: #666; position: sticky; top: 0; }
-    .monthly-tbl td:first-child { text-align: left; padding-left: 8px; font-size: 12px; position: sticky; left: 0; background: #fff; }
+    .monthly-tbl th { background: #f5f4f0; font-weight: 500; color: #666; position: sticky; top: 0; z-index: 2; }
+    .monthly-tbl td:first-child, .monthly-tbl th:first-child { position: sticky; left: 0; z-index: 3; background: #f5f4f0; }
+    .monthly-tbl td:first-child { background: #fff; font-size: 11px; color: #aaa; }
+    .monthly-tbl td:nth-child(2), .monthly-tbl th:nth-child(2) { position: sticky; left: 28px; z-index: 3; background: #f5f4f0; }
+    .monthly-tbl td:nth-child(2) { background: #fff; text-align: left; padding-left: 6px; font-size: 12px; }
+    .monthly-tbl th:first-child, .monthly-tbl th:nth-child(2), .monthly-tbl th:nth-child(3) { z-index: 4; }
     .o-mark { color: #1D9E75; font-weight: 700; }
     .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2c2c2a; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100; white-space: nowrap; }
     .toast.show { opacity: 1; }
@@ -92,12 +96,14 @@
 </div>
 
 <div class="content" id="tab-monthly">
-  <div class="card">
-    <div class="sec-title" style="margin-bottom:10px">📅 <span id="monthly-title">월간 전체 출석표</span></div>
-    <div class="monthly-wrap">
-      <table class="monthly-tbl" id="monthly-tbl"></table>
+  <div class="card" style="margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <button onclick="moveMonth(-1)" style="background:#f1efe8;border:none;border-radius:8px;padding:8px 14px;font-size:16px;cursor:pointer;">‹</button>
+      <select id="month-select" onchange="selectMonth(this.value)" style="flex:1;text-align:center;font-size:15px;font-weight:600;padding:8px;border:1.5px solid #e8e7e3;border-radius:8px;background:#fff;color:#2c2c2a;"></select>
+      <button onclick="moveMonth(1)" style="background:#f1efe8;border:none;border-radius:8px;padding:8px 14px;font-size:16px;cursor:pointer;">›</button>
     </div>
   </div>
+  <div id="monthly-tables"></div>
 </div>
 
 <div class="content" id="tab-admin">
@@ -175,21 +181,12 @@
   `).join("");
   }
 
-  async function loadMonthly() {
-    const now = new Date();
-    const res = await fetch(`/api/monthly?year=${now.getFullYear()}&month=${now.getMonth()+1}`);
+  async function buildMonthTable(ym) {
+    const [y, m] = ym.split("-");
+    const res = await fetch(`/api/monthly?year=${y}&month=${parseInt(m)}`);
     const data = await res.json();
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
-    const m = String(now.getMonth()+1).padStart(2,"0");
-    const y = now.getFullYear();
+    const daysInMonth = new Date(parseInt(y), parseInt(m), 0).getDate();
 
-    document.getElementById("monthly-title").textContent = `${now.getMonth()+1}월 전체 출석표`;
-
-    let html = "<thead><tr><th>No</th><th>이름</th><th>계</th>";
-    for (let d = 1; d <= daysInMonth; d++) html += `<th>${d}</th>`;
-    html += "</tr></thead><tbody>";
-
-    // 일별 합계 계산
     const dayCounts = {};
     data.forEach(r => {
       r.dates.forEach(dt => {
@@ -198,6 +195,13 @@
       });
     });
     const totalAll = data.reduce((s, r) => s + r.count, 0);
+
+    let html = `<div class="card" style="margin-bottom:12px">
+    <div class="sec-title" style="margin-bottom:10px">📅 ${parseInt(m)}월 전체 출석표</div>
+    <div class="monthly-wrap"><table class="monthly-tbl">
+    <thead><tr><th>No</th><th>이름</th><th>계</th>`;
+    for (let d = 1; d <= daysInMonth; d++) html += `<th>${d}</th>`;
+    html += "</tr></thead><tbody>";
 
     data.forEach((r, i) => {
       const ds = new Set(r.dates);
@@ -209,18 +213,59 @@
       html += "</tr>";
     });
 
-    // 맨 아래 전체 합계 행
     html += `<tr style="background:#FEE500;border-top:2px solid #D3D1C7">
     <td style="font-weight:700;color:#2C2C2A;font-size:11px" colspan="2">일별 합계</td>
     <td style="font-weight:700;color:#2C2C2A">${totalAll}</td>`;
     for (let d = 1; d <= daysInMonth; d++) {
-      const cnt = dayCounts[d] || 0;
-      html += `<td style="font-weight:700;color:#2C2C2A">${cnt || ''}</td>`;
+      html += `<td style="font-weight:700;color:#2C2C2A">${dayCounts[d] || ''}</td>`;
     }
-    html += "</tr>";
+    html += "</tr></tbody></table></div></div>";
+    return html;
+  }
 
-    html += "</tbody>";
-    document.getElementById("monthly-tbl").innerHTML = html;
+  let allMonths = [];
+  let currentMonthIdx = 0;
+
+  async function loadMonthly() {
+    const res = await fetch("/api/months");
+    allMonths = await res.json();
+    if (!allMonths.length) return;
+
+    // 현재 달로 초기화
+    const now = new Date();
+    const nowYM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+    currentMonthIdx = allMonths.indexOf(nowYM);
+    if (currentMonthIdx === -1) currentMonthIdx = allMonths.length - 1;
+
+    // 드랍다운 옵션 생성
+    const sel = document.getElementById("month-select");
+    sel.innerHTML = allMonths.map((ym, i) => {
+      const [y, m] = ym.split("-");
+      return `<option value="${i}" ${i === currentMonthIdx ? 'selected' : ''}>${y}년 ${parseInt(m)}월</option>`;
+    }).join("");
+
+    await renderCurrentMonth();
+  }
+
+  async function renderCurrentMonth() {
+    const container = document.getElementById("monthly-tables");
+    container.innerHTML = '<div style="padding:20px;text-align:center;color:#aaa">불러오는 중...</div>';
+    const ym = allMonths[currentMonthIdx];
+    const html = await buildMonthTable(ym);
+    container.innerHTML = html;
+    document.getElementById("month-select").value = currentMonthIdx;
+  }
+
+  async function moveMonth(dir) {
+    const newIdx = currentMonthIdx + dir;
+    if (newIdx < 0 || newIdx >= allMonths.length) return;
+    currentMonthIdx = newIdx;
+    await renderCurrentMonth();
+  }
+
+  async function selectMonth(idx) {
+    currentMonthIdx = parseInt(idx);
+    await renderCurrentMonth();
   }
 
   async function shareToKakao() {
