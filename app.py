@@ -4,17 +4,32 @@ import os
 import re
 import psycopg2
 import psycopg2.extras
+from psycopg2 import pool
 from image_gen import generate_attendance_image
 
 app = Flask(__name__)
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+# 커넥션 풀 (최소 1개, 최대 10개 연결 재사용)
+connection_pool = None
+
+def init_pool():
+    global connection_pool
+    connection_pool = pool.ThreadedConnectionPool(
+        1, 10,
+        DATABASE_URL,
+        sslmode="require"
+    )
+
 def get_db():
-    conn = psycopg2.connect(DATABASE_URL, sslmode="require")
-    return conn
+    return connection_pool.getconn()
+
+def release_db(conn):
+    connection_pool.putconn(conn)
 
 def init_db():
+    init_pool()
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
@@ -40,7 +55,7 @@ def init_db():
         cur.execute("INSERT INTO members (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (m,))
     conn.commit()
     cur.close()
-    conn.close()
+    release_db(conn)
 
 def remove_emoji(text):
     emoji_pattern = re.compile("["
@@ -119,7 +134,7 @@ def api_today():
     cur.execute("SELECT name FROM members ORDER BY name")
     all_members = [r["name"] for r in cur.fetchall()]
     cur.close()
-    conn.close()
+    release_db(conn)
 
     absent = [n for n in all_members if n not in present]
     return jsonify({
@@ -137,7 +152,7 @@ def api_months():
     cur.execute("SELECT DISTINCT TO_CHAR(date, 'YYYY-MM') as ym FROM attendance ORDER BY ym")
     months = [r["ym"] for r in cur.fetchall()]
     cur.close()
-    conn.close()
+    release_db(conn)
     if not months:
         now = date.today()
         months = [f"{now.year}-{now.month:02d}"]
@@ -163,7 +178,7 @@ def api_monthly():
                 """, (start, end))
     records = cur.fetchall()
     cur.close()
-    conn.close()
+    release_db(conn)
 
     att_map = {}
     for r in records:
@@ -187,7 +202,7 @@ def api_aliases():
                 """)
     rows = cur.fetchall()
     cur.close()
-    conn.close()
+    release_db(conn)
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/aliases/add", methods=["POST"])
@@ -203,7 +218,7 @@ def api_alias_add():
     member = cur.fetchone()
     if not member:
         cur.close()
-        conn.close()
+        release_db(conn)
         return jsonify({"error": f"멤버 '{member_name}'를 찾을 수 없어요"}), 404
     try:
         cur.execute("INSERT INTO aliases (member_id, alias) VALUES (%s, %s)", (member["id"], alias))
@@ -211,10 +226,10 @@ def api_alias_add():
     except Exception as e:
         conn.rollback()
         cur.close()
-        conn.close()
+        release_db(conn)
         return jsonify({"error": "이미 등록된 alias예요"}), 400
     cur.close()
-    conn.close()
+    release_db(conn)
     return jsonify({"ok": True})
 
 @app.route("/api/aliases/delete", methods=["POST"])
@@ -226,7 +241,7 @@ def api_alias_delete():
     cur.execute("DELETE FROM aliases WHERE id=%s", (alias_id,))
     conn.commit()
     cur.close()
-    conn.close()
+    release_db(conn)
     return jsonify({"ok": True})
 
 @app.route("/api/members")
@@ -236,7 +251,7 @@ def api_members():
     cur.execute("SELECT id, name FROM members ORDER BY name")
     members = [dict(r) for r in cur.fetchall()]
     cur.close()
-    conn.close()
+    release_db(conn)
     return jsonify(members)
 
 @app.route("/api/checkin", methods=["POST"])
@@ -263,7 +278,7 @@ def api_checkin():
             unmatched.append(name)
     conn.commit()
     cur.close()
-    conn.close()
+    release_db(conn)
 
     try:
         generate_attendance_image(parsed_date)
@@ -291,7 +306,7 @@ def api_share_text():
                 """)
     top = cur.fetchall()
     cur.close()
-    conn.close()
+    release_db(conn)
 
     dt = datetime.strptime(target, "%Y-%m-%d")
     weekdays = ["월","화","수","목","금","토","일"]
