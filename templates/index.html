@@ -28,6 +28,9 @@
     .sec-title { font-size: 13px; font-weight: 600; color: #888; margin-bottom: 10px; }
     .chip-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
     .chip { background: #E1F5EE; color: #085041; font-size: 13px; padding: 5px 11px; border-radius: 20px; }
+    .chip-gold { background: #FFF3CD; color: #856404; border: 1px solid #FFD700; font-size: 13px; padding: 5px 11px; border-radius: 20px; }
+    .chip-silver { background: #F0F0F0; color: #555; border: 1px solid #C0C0C0; font-size: 13px; padding: 5px 11px; border-radius: 20px; }
+    .chip-bronze { background: #FDE8D8; color: #7B3F00; border: 1px solid #CD7F32; font-size: 13px; padding: 5px 11px; border-radius: 20px; }
     .chip.absent { background: #f1efe8; color: #888; }
     .share-btn { width: 100%; padding: 14px; background: #FEE500; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; color: #2c2c2a; cursor: pointer; margin-top: 4px; }
     .share-btn:active { opacity: 0.8; transform: scale(0.98); }
@@ -53,7 +56,7 @@
     .monthly-tbl td:nth-child(2), .monthly-tbl th:nth-child(2) { position: sticky; left: 28px; z-index: 3; background: #f5f4f0; }
     .monthly-tbl td:nth-child(2) { background: #fff; text-align: left; padding-left: 6px; font-size: 12px; }
     .monthly-tbl td:nth-child(3), .monthly-tbl th:nth-child(3) { position: sticky; left: 56px; z-index: 3; background: #f5f4f0; }
-    .monthly-tbl td:nth-child(3) { background: #fff; font-weight: 600; color: #1D9E75; }
+    .monthly-tbl td:nth-child(3) { background: #fff; font-weight: 600; color: #185FA5; }
     .monthly-tbl th:first-child, .monthly-tbl th:nth-child(2), .monthly-tbl th:nth-child(3) { z-index: 4; }
     .o-mark { color: #1D9E75; font-weight: 700; }
     .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2c2c2a; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100; white-space: nowrap; }
@@ -170,8 +173,21 @@
     document.getElementById("s-rate").textContent = (d.count / d.total * 100).toFixed(1) + "%";
     document.getElementById("present-cnt").textContent = d.count;
     document.getElementById("absent-cnt").textContent = d.absent.length;
+    // 1~3위 뱃지용 랭킹 가져오기
+    const rankRes = await fetch("/api/monthly");
+    const rankData = await rankRes.json();
+    const top3 = rankData.slice(0, 3).map(r => r.name);
+    const medals = ["🥇", "🥈", "🥉"];
+    const medalColors = ["chip-gold", "chip-silver", "chip-bronze"];
+
     document.getElementById("present-list").innerHTML =
-            d.present.length ? d.present.map(n => `<span class="chip">${n}</span>`).join("") : '<span class="empty">아직 없음</span>';
+            d.present.length ? d.present.map(n => {
+              const rankIdx = top3.indexOf(n);
+              if (rankIdx !== -1) {
+                return `<span class="chip ${medalColors[rankIdx]}">${medals[rankIdx]} ${n}</span>`;
+              }
+              return `<span class="chip">${n}</span>`;
+            }).join("") : '<span class="empty">아직 없음</span>';
     document.getElementById("absent-list").innerHTML =
             d.absent.map(n => `<span class="chip absent">${n}</span>`).join("");
   }
