@@ -52,11 +52,9 @@
     .monthly-tbl td:first-child { background: #fff; font-size: 11px; color: #aaa; }
     .monthly-tbl td:nth-child(2), .monthly-tbl th:nth-child(2) { position: sticky; left: 28px; z-index: 3; background: #f5f4f0; }
     .monthly-tbl td:nth-child(2) { background: #fff; text-align: left; padding-left: 6px; font-size: 12px; }
-    .monthly-tbl td:nth-child(3), .monthly-tbl th:nth-child(3) { position: sticky; left: 56px; z-index: 3; background: #E6F1FB; }
-    .monthly-tbl td:nth-child(3) { background: #E6F1FB; font-weight: 600; color: #0C447C; }
-    .monthly-tbl td:first-child { background: #E6F1FB !important; color: #0C447C; }
-    .monthly-tbl td:nth-child(2) { background: #E6F1FB !important; color: #0C447C; font-weight: 500; }
-    .monthly-tbl th:first-child, .monthly-tbl th:nth-child(2), .monthly-tbl th:nth-child(3) { z-index: 4; background: #185FA5; }
+    .monthly-tbl td:nth-child(3), .monthly-tbl th:nth-child(3) { position: sticky; left: 56px; z-index: 3; background: #f5f4f0; }
+    .monthly-tbl td:nth-child(3) { background: #fff; font-weight: 600; color: #1D9E75; }
+    .monthly-tbl th:first-child, .monthly-tbl th:nth-child(2), .monthly-tbl th:nth-child(3) { z-index: 4; }
     .o-mark { color: #1D9E75; font-weight: 700; }
     .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2c2c2a; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100; white-space: nowrap; }
     .toast.show { opacity: 1; }
@@ -270,21 +268,6 @@
     container.innerHTML = html;
     document.getElementById("month-select").value = currentMonthIdx;
 
-    // 어제 날짜 컬럼으로 자동 스크롤
-    const kstNow = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
-    const yday = new Date(kstNow.getTime() - 24 * 60 * 60 * 1000);
-    const ydayDay = yday.getDate();
-    const ydayYM = `${yday.getFullYear()}-${String(yday.getMonth()+1).padStart(2,"0")}`;
-    if (ym === ydayYM) {
-      setTimeout(() => {
-        const wrap = document.querySelector(".monthly-wrap");
-        const ths = document.querySelectorAll(".monthly-tbl th");
-        const targetTh = ths[ydayDay + 2];
-        if (wrap && targetTh) {
-          wrap.scrollLeft = Math.max(0, targetTh.offsetLeft - 100);
-        }
-      }, 150);
-    }
   }
 
   async function moveMonth(dir) {
