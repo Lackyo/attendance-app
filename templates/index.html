@@ -231,7 +231,7 @@
 
     data.forEach((r, i) => {
       const ds = new Set(r.dates);
-      html += `<tr><td style="color:#aaa;font-size:11px">${i+1}</td><td>${r.name}</td><td style="font-weight:600;color:#1D9E75">${r.count}</td>`;
+      html += `<tr><td style="color:#aaa;font-size:11px">${i+1}</td><td>${r.name}</td><td>${r.count}</td>`;
       for (let d = 1; d <= daysInMonth; d++) {
         const key = `${y}-${m}-${String(d).padStart(2,"0")}`;
         html += `<td>${ds.has(key) ? '<span class="o-mark">O</span>' : ''}</td>`;
