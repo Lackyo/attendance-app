@@ -166,8 +166,10 @@
     const d = await res.json();
     const dt = new Date(today + "T00:00:00");
     const days = ["일","월","화","수","목","금","토"];
+    // 헤더는 오늘 날짜로
+    const todayDt = new Date(kstNow);
     document.getElementById("header-date").textContent =
-            `어제 ${dt.getMonth()+1}월 ${dt.getDate()}일(${days[dt.getDay()]})`;
+            `${todayDt.getMonth()+1}월 ${todayDt.getDate()}일(${days[todayDt.getDay()]})`;
     document.getElementById("s-count").textContent = d.count;
     document.getElementById("s-total").textContent = d.total;
     document.getElementById("s-rate").textContent = (d.count / d.total * 100).toFixed(1) + "%";
