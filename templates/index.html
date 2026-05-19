@@ -140,9 +140,9 @@
 
 <script>
   const now = new Date();
-  const kstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  const yesterday = new Date(kstNow.getTime() - 24 * 60 * 60 * 1000);
-  const today = yesterday.toISOString().split("T")[0];
+  const kstNow = now; // 브라우저는 이미 로컬 시간
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const today = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,"0")}-${String(yesterday.getDate()).padStart(2,"0")}`;
 
   function switchTab(name) {
     ["admin","today","ranking","monthly","alias"].forEach((n, i) => {
@@ -228,7 +228,7 @@
     <div class="sec-title" style="margin-bottom:10px">📅 ${parseInt(m)}월 전체 출석표</div>
     <div class="monthly-wrap"><table class="monthly-tbl">
     <thead><tr><th style="width:32px;min-width:32px">No</th><th style="width:80px;min-width:80px">이름</th><th style="width:32px;min-width:32px">참여</th>`;
-    for (let d = 1; d <= daysInMonth; d++) html += `<th>${d}</th>`;
+    for (let d = 1; d <= daysInMonth; d++) html += `<th style="width:24px;min-width:24px">${d}</th>`;
     html += "</tr></thead><tbody>";
 
     data.forEach((r, i) => {
