@@ -53,9 +53,9 @@
     .monthly-tbl th { background: #f5f4f0; font-weight: 500; color: #666; position: sticky; top: 0; z-index: 2; }
     .monthly-tbl td:first-child, .monthly-tbl th:first-child { position: sticky; left: 0; z-index: 3; background: #f5f4f0; min-width: 32px; width: 32px; }
     .monthly-tbl td:first-child { background: #fff; font-size: 11px; color: #aaa; }
-    .monthly-tbl td:nth-child(2), .monthly-tbl th:nth-child(2) { position: sticky; left: 32px; z-index: 3; background: #f5f4f0; min-width: 90px; width: 90px; }
-    .monthly-tbl td:nth-child(2) { background: #fff; text-align: left; padding-left: 6px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90px; }
-    .monthly-tbl td:nth-child(3), .monthly-tbl th:nth-child(3) { position: sticky; left: 122px; z-index: 3; background: #f5f4f0; min-width: 32px; width: 32px; }
+    .monthly-tbl td:nth-child(2), .monthly-tbl th:nth-child(2) { position: sticky; left: 32px; z-index: 3; background: #f5f4f0; min-width: 80px; width: 80px; }
+    .monthly-tbl td:nth-child(2) { background: #fff; text-align: left; padding-left: 6px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 80px; }
+    .monthly-tbl td:nth-child(3), .monthly-tbl th:nth-child(3) { position: sticky; left: 112px; z-index: 3; background: #f5f4f0; min-width: 32px; width: 32px; }
     .monthly-tbl td:nth-child(3) { background: #fff; font-weight: 600; color: #185FA5; }
     .monthly-tbl th:first-child, .monthly-tbl th:nth-child(2), .monthly-tbl th:nth-child(3) { z-index: 4; }
     .o-mark { color: #1D9E75; font-weight: 700; }
@@ -225,7 +225,7 @@
     let html = `<div class="card" style="margin-bottom:12px">
     <div class="sec-title" style="margin-bottom:10px">📅 ${parseInt(m)}월 전체 출석표</div>
     <div class="monthly-wrap"><table class="monthly-tbl">
-    <thead><tr><th>No</th><th>이름</th><th>참여</th>`;
+    <thead><tr><th style="width:32px;min-width:32px">No</th><th style="width:80px;min-width:80px">이름</th><th style="width:32px;min-width:32px">참여</th>`;
     for (let d = 1; d <= daysInMonth; d++) html += `<th>${d}</th>`;
     html += "</tr></thead><tbody>";
 
