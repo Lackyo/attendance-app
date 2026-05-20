@@ -233,7 +233,7 @@
 
     data.forEach((r, i) => {
       const ds = new Set(r.dates);
-      html += `<tr><td style="color:#aaa;font-size:11px">${i+1}</td><td>${r.name}</td><td>${r.count}</td>`;
+      html += `<tr><td style="color:#aaa;font-size:11px;width:32px;max-width:32px">${i+1}</td><td style="width:80px;max-width:80px;overflow:hidden;text-overflow:ellipsis">${r.name}</td><td style="width:32px;max-width:32px;font-weight:600;color:#185FA5">${r.count}</td>`;
       for (let d = 1; d <= daysInMonth; d++) {
         const key = `${y}-${m}-${String(d).padStart(2,"0")}`;
         html += `<td>${ds.has(key) ? '<span class="o-mark">O</span>' : ''}</td>`;
@@ -242,8 +242,9 @@
     });
 
     html += `<tr style="background:#FEE500;border-top:2px solid #D3D1C7">
-    <td style="font-weight:700;color:#2C2C2A;font-size:11px" colspan="2">일별 합계</td>
-    <td style="font-weight:700;color:#2C2C2A">${totalAll}</td>`;
+    <td style="font-weight:700;color:#2C2C2A;font-size:11px;width:32px;max-width:32px"></td>
+    <td style="font-weight:700;color:#2C2C2A;text-align:left;padding-left:8px;width:80px;max-width:80px">일별 합계</td>
+    <td style="font-weight:700;color:#2C2C2A;width:32px;max-width:32px">${totalAll}</td>`;
     for (let d = 1; d <= daysInMonth; d++) {
       html += `<td style="font-weight:700;color:#2C2C2A">${dayCounts[d] || ''}</td>`;
     }
