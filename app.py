@@ -31,13 +31,7 @@ def init_db():
                     UNIQUE(member_id, date)
                     );
                 """)
-    members = [
-        "계란","꽁치","노을","레오","무지","방장","새벽","제니","열심히행복","오운어",
-        "요이","와치","유치원","이팀장","주이","코코아빠","화이띵","자본주의미소","체리",
-        "sleep well","여우","홈트","가쥬아","스딩","김금삼","손라","아비노","차니",
-        "원판수집가","초코언니","스와","김철수","하급닌자","졔초이","딩딩","돈까스",
-        "제제","먕하치","양재동","밥춘식","봉봉"
-    ]
+    members = ["방장"]
     for m in members:
         cur.execute("INSERT INTO members (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (m,))
     conn.commit()
