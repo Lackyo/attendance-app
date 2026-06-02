@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify, send_file
 from datetime import datetime, date
 import os
 import re
+import calendar
 import psycopg2
 import psycopg2.extras
 from image_gen import generate_attendance_image
@@ -144,8 +145,9 @@ def api_monthly():
     now = date.today()
     year = int(request.args.get("year", now.year))
     month = int(request.args.get("month", now.month))
+    last_day = calendar.monthrange(year, month)[1]
     start = f"{year}-{month:02d}-01"
-    end = f"{year}-{month:02d}-31"
+    end = f"{year}-{month:02d}-{last_day}"
 
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
