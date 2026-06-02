@@ -95,8 +95,15 @@
 </div>
 
 <div class="content" id="tab-ranking">
+  <div class="card" style="margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <button onclick="moveRankMonth(-1)" style="background:#f1efe8;border:none;border-radius:8px;padding:8px 14px;font-size:16px;cursor:pointer;">‹</button>
+      <select id="rank-month-select" onchange="selectRankMonth(this.value)" style="flex:1;text-align:center;font-size:15px;font-weight:600;padding:8px;border:1.5px solid #e8e7e3;border-radius:8px;background:#fff;color:#2c2c2a;"></select>
+      <button onclick="moveRankMonth(1)" style="background:#f1efe8;border:none;border-radius:8px;padding:8px 14px;font-size:16px;cursor:pointer;">›</button>
+    </div>
+  </div>
   <div class="card">
-    <div class="sec-title" style="margin-bottom:12px">🏆 이번 달 누적 출석 순위</div>
+    <div class="sec-title" style="margin-bottom:12px" id="ranking-title">🏆 이번 달 누적 출석 순위</div>
     <div id="ranking-list"></div>
   </div>
   <div class="card" style="margin-top:0">
@@ -212,11 +219,37 @@
             d.absent.map(n => `<span class="chip absent">${n}</span>`).join("");
   }
 
+  let rankMonths = [];
+  let rankMonthIdx = 0;
+
   async function loadRanking() {
-    const res = await fetch("/api/monthly");
+    const now = new Date();
+    const nowYM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+    const res = await fetch("/api/months");
+    rankMonths = await res.json();
+    if (!rankMonths.includes(nowYM)) rankMonths.push(nowYM);
+    rankMonths.sort();
+    rankMonthIdx = rankMonths.indexOf(nowYM);
+
+    const sel = document.getElementById("rank-month-select");
+    sel.innerHTML = rankMonths.map((ym, i) => {
+      const [y, m] = ym.split("-");
+      return `<option value="${i}" ${i === rankMonthIdx ? 'selected' : ''}>${y}년 ${parseInt(m)}월</option>`;
+    }).join("");
+
+    await renderRanking();
+  }
+
+  async function renderRanking() {
+    const ym = rankMonths[rankMonthIdx];
+    const [y, m] = ym.split("-");
+    const res = await fetch(`/api/monthly?year=${y}&month=${parseInt(m)}`);
     const data = await res.json();
     const max = data[0]?.count || 1;
     const medals = ["🥇","🥈","🥉"];
+
+    document.getElementById("ranking-title").textContent = `🏆 ${parseInt(m)}월 누적 출석 순위`;
+    document.getElementById("rank-month-select").value = rankMonthIdx;
     document.getElementById("ranking-list").innerHTML = data.map((r, i) => `
     <div class="rank-row">
       <div class="${i < 3 ? 'rank-medal' : 'rank-num'}">${i < 3 ? medals[i] : i+1}</div>
@@ -225,6 +258,18 @@
       <div class="rank-cnt">${r.count}회</div>
     </div>
   `).join("");
+  }
+
+  async function moveRankMonth(dir) {
+    const newIdx = rankMonthIdx + dir;
+    if (newIdx < 0 || newIdx >= rankMonths.length) return;
+    rankMonthIdx = newIdx;
+    await renderRanking();
+  }
+
+  async function selectRankMonth(idx) {
+    rankMonthIdx = parseInt(idx);
+    await renderRanking();
   }
 
   async function buildMonthTable(ym) {
