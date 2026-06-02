@@ -78,6 +78,19 @@ def parse_kakao_message(text):
 
     return parsed_date, names
 
+def get_streak(member_id, cur):
+    cur.execute("SELECT date FROM attendance WHERE member_id=%s ORDER BY date DESC", (member_id,))
+    dates = [r["date"] if isinstance(r, dict) else r[0] for r in cur.fetchall()]
+    if not dates:
+        return 0
+    streak = 1
+    for i in range(1, len(dates)):
+        if (dates[i-1] - dates[i]).days == 1:
+            streak += 1
+        else:
+            break
+    return streak
+
 def find_member_id(name, cur):
     # 1단계 - 정확히 일치
     cur.execute("SELECT id FROM members WHERE name=%s", (name,))
@@ -160,18 +173,29 @@ def api_monthly():
                 WHERE a.date >= %s AND a.date <= %s
                 """, (start, end))
     records = cur.fetchall()
-    cur.close()
-    release_db(conn)
-
     att_map = {}
     for r in records:
         att_map.setdefault(r["name"], set()).add(r["date"])
 
+    # 올해 총 출석일수 조회
+    cur.execute("""
+                SELECT m.id, COUNT(*) as yearly FROM attendance a
+                                                         JOIN members m ON a.member_id = m.id
+                WHERE EXTRACT(YEAR FROM a.date) = %s
+                GROUP BY m.id
+                """, (year,))
+    yearly_map = {r["id"]: r["yearly"] for r in cur.fetchall()}
+
     result = []
     for m in members:
         dates = sorted(att_map.get(m["name"], []))
-        result.append({"name": m["name"], "count": len(dates), "dates": dates})
-    result.sort(key=lambda x: -x["count"])
+        streak = get_streak(m["id"], cur) if dates else 0
+        yearly = yearly_map.get(m["id"], 0)
+        result.append({"name": m["name"], "count": len(dates), "dates": dates, "streak": streak, "yearly": yearly})
+    # 1순위: 출석 횟수, 2순위: 연속 출석, 3순위: 올해 총 출석, 4순위: 이름 가나다순
+    cur.close()
+    release_db(conn)
+    result.sort(key=lambda x: (-x["count"], -x["streak"], -x["yearly"], x["name"]))
     return jsonify(result)
 
 @app.route("/api/aliases")
