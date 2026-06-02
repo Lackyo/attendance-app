@@ -78,18 +78,24 @@ def parse_kakao_message(text):
 
     return parsed_date, names
 
-def get_streak(member_id, cur):
-    cur.execute("SELECT date FROM attendance WHERE member_id=%s ORDER BY date DESC", (member_id,))
-    dates = [r["date"] if isinstance(r, dict) else r[0] for r in cur.fetchall()]
-    if not dates:
-        return 0
-    streak = 1
-    for i in range(1, len(dates)):
-        if (dates[i-1] - dates[i]).days == 1:
-            streak += 1
-        else:
-            break
-    return streak
+def get_all_streaks(cur):
+    cur.execute("SELECT member_id, date FROM attendance ORDER BY member_id, date DESC")
+    rows = cur.fetchall()
+    member_dates = {}
+    for r in rows:
+        mid = r["member_id"] if isinstance(r, dict) else r[0]
+        d = r["date"] if isinstance(r, dict) else r[1]
+        member_dates.setdefault(mid, []).append(d)
+    streaks = {}
+    for mid, dates in member_dates.items():
+        streak = 1
+        for i in range(1, len(dates)):
+            if (dates[i-1] - dates[i]).days == 1:
+                streak += 1
+            else:
+                break
+        streaks[mid] = streak
+    return streaks
 
 def find_member_id(name, cur):
     # 1단계 - 정확히 일치
@@ -177,7 +183,10 @@ def api_monthly():
     for r in records:
         att_map.setdefault(r["name"], set()).add(r["date"])
 
-    # 올해 총 출석일수 조회
+    # 연속 출석 일괄 계산 (쿼리 1회)
+    streak_map = get_all_streaks(cur)
+
+    # 올해 총 출석일수 조회 (쿼리 1회)
     cur.execute("""
                 SELECT m.id, COUNT(*) as yearly FROM attendance a
                                                          JOIN members m ON a.member_id = m.id
@@ -189,7 +198,7 @@ def api_monthly():
     result = []
     for m in members:
         dates = sorted(att_map.get(m["name"], []))
-        streak = get_streak(m["id"], cur) if dates else 0
+        streak = streak_map.get(m["id"], 0)
         yearly = yearly_map.get(m["id"], 0)
         result.append({"name": m["name"], "count": len(dates), "dates": dates, "streak": streak, "yearly": yearly})
     # 1순위: 출석 횟수, 2순위: 연속 출석, 3순위: 올해 총 출석, 4순위: 이름 가나다순
