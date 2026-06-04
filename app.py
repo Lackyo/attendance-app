@@ -204,7 +204,7 @@ def api_monthly():
     # 1순위: 출석 횟수, 2순위: 연속 출석, 3순위: 올해 총 출석, 4순위: 이름 가나다순
     cur.close()
     release_db(conn)
-    result.sort(key=lambda x: (-x["count"], -x["streak"], -x["yearly"], x["name"]))
+    result.sort(key=lambda x: (-x["count"], -x["yearly"], x["name"]))
     return jsonify(result)
 
 @app.route("/api/aliases")
