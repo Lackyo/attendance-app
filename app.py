@@ -207,6 +207,31 @@ def api_monthly():
     result.sort(key=lambda x: (-x["count"], -x["yearly"], x["name"]))
     return jsonify(result)
 
+@app.route("/api/yearly")
+def api_yearly():
+    year = int(request.args.get("year", date.today().year))
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT id, name FROM members ORDER BY id")
+    members = cur.fetchall()
+
+    cur.execute("""
+                SELECT m.id, m.name, COUNT(*) as cnt FROM attendance a
+                                                              JOIN members m ON a.member_id = m.id
+                WHERE EXTRACT(YEAR FROM a.date) = %s
+                GROUP BY m.id, m.name
+                """, (year,))
+    counts = {r["id"]: {"name": r["name"], "count": r["cnt"]} for r in cur.fetchall()}
+    cur.close()
+    release_db(conn)
+
+    result = []
+    for m in members:
+        cnt = counts.get(m["id"], {}).get("count", 0)
+        result.append({"name": m["name"], "count": cnt})
+    result.sort(key=lambda x: (-x["count"], x["name"]))
+    return jsonify(result)
+
 @app.route("/api/aliases")
 def api_aliases():
     conn = get_db()

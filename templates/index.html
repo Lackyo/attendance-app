@@ -228,10 +228,17 @@
     rankMonths = await res.json();
     if (!rankMonths.includes(nowYM)) rankMonths.push(nowYM);
     rankMonths.sort();
+    // 마지막에 "연간 전체" 추가
+    const lastYear = rankMonths[rankMonths.length - 1].split("-")[0];
+    rankMonths.push(`${lastYear}-ALL`);
     rankMonthIdx = rankMonths.indexOf(nowYM);
 
     const sel = document.getElementById("rank-month-select");
     sel.innerHTML = rankMonths.map((ym, i) => {
+      if (ym.endsWith("-ALL")) {
+        const y = ym.split("-")[0];
+        return `<option value="${i}">${y}년 전체</option>`;
+      }
       const [y, m] = ym.split("-");
       return `<option value="${i}" ${i === rankMonthIdx ? 'selected' : ''}>${y}년 ${parseInt(m)}월</option>`;
     }).join("");
@@ -241,13 +248,24 @@
 
   async function renderRanking() {
     const ym = rankMonths[rankMonthIdx];
-    const [y, m] = ym.split("-");
-    const res = await fetch(`/api/monthly?year=${y}&month=${parseInt(m)}`);
-    const data = await res.json();
+    let data, title;
+
+    if (ym.endsWith("-ALL")) {
+      const y = ym.split("-")[0];
+      const res = await fetch(`/api/yearly?year=${y}`);
+      data = await res.json();
+      title = `🏆 ${y}년 전체 출석 순위`;
+    } else {
+      const [y, m] = ym.split("-");
+      const res = await fetch(`/api/monthly?year=${y}&month=${parseInt(m)}`);
+      data = await res.json();
+      title = `🏆 ${parseInt(m)}월 누적 출석 순위`;
+    }
+
     const max = data[0]?.count || 1;
     const medals = ["🥇","🥈","🥉"];
 
-    document.getElementById("ranking-title").textContent = `🏆 ${parseInt(m)}월 누적 출석 순위`;
+    document.getElementById("ranking-title").textContent = title;
     document.getElementById("rank-month-select").value = rankMonthIdx;
     document.getElementById("ranking-list").innerHTML = data.map((r, i) => `
     <div class="rank-row">
