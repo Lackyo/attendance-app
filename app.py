@@ -132,7 +132,7 @@ def api_today():
                 """, (target,))
     present = [r["name"] for r in cur.fetchall()]
 
-    cur.execute("SELECT name FROM members ORDER BY name")
+    cur.execute("SELECT name FROM members WHERE active = TRUE ORDER BY name")
     all_members = [r["name"] for r in cur.fetchall()]
     cur.close()
     release_db(conn)
@@ -170,7 +170,7 @@ def api_monthly():
 
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT id, name FROM members ORDER BY id")
+    cur.execute("SELECT id, name FROM members WHERE active = TRUE ORDER BY id")
     members = cur.fetchall()
 
     cur.execute("""
@@ -212,7 +212,7 @@ def api_yearly():
     year = int(request.args.get("year", date.today().year))
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT id, name FROM members ORDER BY id")
+    cur.execute("SELECT id, name FROM members WHERE active = TRUE ORDER BY id")
     members = cur.fetchall()
 
     cur.execute("""
@@ -289,11 +289,67 @@ def api_alias_delete():
 def api_members():
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT id, name FROM members ORDER BY name")
+    cur.execute("SELECT id, name FROM members WHERE active = TRUE ORDER BY name")
     members = [dict(r) for r in cur.fetchall()]
     cur.close()
     release_db(conn)
     return jsonify(members)
+
+@app.route("/api/members/add", methods=["POST"])
+def api_member_add():
+    data = request.json
+    name = data.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "이름을 입력해주세요"}), 400
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("INSERT INTO members (name, active) VALUES (%s, TRUE) RETURNING id", (name,))
+        new_id = cur.fetchone()["id"]
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        cur.close()
+        release_db(conn)
+        return jsonify({"error": "이미 등록된 멤버예요"}), 400
+    cur.close()
+    release_db(conn)
+    return jsonify({"ok": True, "id": new_id, "name": name})
+
+@app.route("/api/members/rename", methods=["POST"])
+def api_member_rename():
+    data = request.json
+    mid = data.get("id")
+    name = data.get("name", "").strip()
+    if not mid or not name:
+        return jsonify({"error": "이름을 입력해주세요"}), 400
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE members SET name=%s WHERE id=%s", (name, mid))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        cur.close()
+        release_db(conn)
+        return jsonify({"error": "이미 있는 이름이에요"}), 400
+    cur.close()
+    release_db(conn)
+    return jsonify({"ok": True})
+
+@app.route("/api/members/delete", methods=["POST"])
+def api_member_delete():
+    data = request.json
+    mid = data.get("id")
+    if not mid:
+        return jsonify({"error": "멤버를 선택해주세요"}), 400
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE members SET active = FALSE WHERE id=%s", (mid,))
+    conn.commit()
+    cur.close()
+    release_db(conn)
+    return jsonify({"ok": True})
 
 @app.route("/api/checkin", methods=["POST"])
 def api_checkin():

@@ -62,11 +62,15 @@
     .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2c2c2a; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100; white-space: nowrap; }
     .toast.show { opacity: 1; }
     .empty { color: #bbb; font-size: 13px; padding: 4px 0; }
+    .pin-dot { width: 14px; height: 14px; border-radius: 50%; background: #e8e7e3; transition: background 0.15s; }
+    .pin-dot.filled { background: #2c2c2a; }
+    .pin-btn { padding: 14px; font-size: 18px; font-weight: 600; background: #f5f4f0; border: none; border-radius: 10px; cursor: pointer; }
+    .pin-btn:active { background: #e8e7e3; }
   </style>
 </head>
 <body>
 <div class="header">
-  <h1>폭헬방 출석부 🏋️</h1>
+  <h1 id="header-title" onclick="handleAdminTap()" style="user-select:none;-webkit-user-select:none">폭헬방 출석부 🏋️</h1>
   <div class="date" id="header-date"></div>
 </div>
 <div class="tabs">
@@ -75,6 +79,7 @@
   <div class="tab" onclick="switchTab('ranking')">랭킹</div>
   <div class="tab" onclick="switchTab('monthly')">출석표</div>
   <div class="tab" onclick="switchTab('alias')">별명관리</div>
+  <div class="tab" id="tab-mgmt-btn" onclick="switchTab('mgmt')" style="display:none;color:#E24B4A">관리자</div>
 </div>
 
 <div class="content" id="tab-today">
@@ -151,6 +156,55 @@
   </div>
 </div>
 
+<!-- 관리자 탭 -->
+<div class="content" id="tab-mgmt">
+  <div class="card">
+    <div class="sec-title" style="margin-bottom:12px">➕ 멤버 추가</div>
+    <div style="display:flex;gap:6px">
+      <input id="mgmt-new-name" type="text" placeholder="새 멤버 이름"
+             onkeydown="if(event.key==='Enter')mgmtAddMember()"
+             style="flex:1;padding:9px;border:1.5px solid #e8e7e3;border-radius:8px;font-size:14px;">
+      <button onclick="mgmtAddMember()"
+              style="padding:9px 16px;background:#1D9E75;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">추가</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="sec-title" style="margin-bottom:10px">👥 멤버 목록</div>
+    <div id="mgmt-member-list"></div>
+  </div>
+  <button onclick="exitAdmin()"
+          style="width:100%;padding:12px;background:#f1efe8;border:none;border-radius:10px;font-size:14px;color:#888;cursor:pointer;margin-top:4px">
+    🔒 관리자 모드 종료
+  </button>
+</div>
+
+<!-- PIN 모달 -->
+<div id="pin-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:24px 20px;width:280px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+    <div style="font-size:15px;font-weight:700;margin-bottom:6px">🔐 관리자 PIN</div>
+    <div style="font-size:12px;color:#aaa;margin-bottom:16px">4자리 PIN을 입력하세요</div>
+    <div id="pin-dots" style="display:flex;justify-content:center;gap:12px;margin-bottom:20px">
+      <div class="pin-dot"></div><div class="pin-dot"></div>
+      <div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      <button class="pin-btn" onclick="pinInput('1')">1</button>
+      <button class="pin-btn" onclick="pinInput('2')">2</button>
+      <button class="pin-btn" onclick="pinInput('3')">3</button>
+      <button class="pin-btn" onclick="pinInput('4')">4</button>
+      <button class="pin-btn" onclick="pinInput('5')">5</button>
+      <button class="pin-btn" onclick="pinInput('6')">6</button>
+      <button class="pin-btn" onclick="pinInput('7')">7</button>
+      <button class="pin-btn" onclick="pinInput('8')">8</button>
+      <button class="pin-btn" onclick="pinInput('9')">9</button>
+      <button class="pin-btn" onclick="pinClear()" style="background:#f1efe8;color:#888;font-size:13px">지우기</button>
+      <button class="pin-btn" onclick="pinInput('0')">0</button>
+      <button class="pin-btn" onclick="pinCancel()" style="background:#f1efe8;color:#888;font-size:13px">취소</button>
+    </div>
+    <div id="pin-error" style="font-size:12px;color:#E24B4A;margin-top:12px;min-height:16px"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -160,13 +214,16 @@
   const today = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,"0")}-${String(yesterday.getDate()).padStart(2,"0")}`;
 
   function switchTab(name) {
-    ["admin","today","ranking","monthly","alias"].forEach((n, i) => {
-      document.querySelectorAll(".tab")[i].classList.toggle("active", n === name);
-      document.getElementById("tab-" + n).classList.toggle("active", n === name);
+    ["admin","today","ranking","monthly","alias","mgmt"].forEach((n, i) => {
+      const tabEl = document.querySelectorAll(".tab")[i];
+      if (tabEl) tabEl.classList.toggle("active", n === name);
+      const contentEl = document.getElementById("tab-" + n);
+      if (contentEl) contentEl.classList.toggle("active", n === name);
     });
     if (name === "ranking") loadRanking();
     if (name === "monthly") loadMonthly();
     if (name === "alias") loadAliases();
+    if (name === "mgmt") loadMgmtMembers();
   }
 
   function showToast(msg) {
@@ -487,6 +544,129 @@
     showToast("삭제됐어요");
     loadAliases();
   }
+
+  // ── 관리자 모드 ───────────────────────────────────────────
+  const ADMIN_PIN = "0531";
+  let adminTapCount = 0, adminTapTimer = null, pinValue = "";
+
+  function handleAdminTap() {
+    adminTapCount++;
+    clearTimeout(adminTapTimer);
+    if (adminTapCount >= 5) {
+      adminTapCount = 0;
+      const isActive = document.getElementById("tab-mgmt-btn").style.display !== "none";
+      if (isActive) { exitAdmin(); return; }
+      openPinModal();
+      return;
+    }
+    adminTapTimer = setTimeout(() => { adminTapCount = 0; }, 1500);
+  }
+
+  function openPinModal() {
+    pinValue = "";
+    updatePinDots();
+    document.getElementById("pin-error").textContent = "";
+    document.getElementById("pin-modal").style.display = "flex";
+  }
+
+  function pinInput(digit) {
+    if (pinValue.length >= 4) return;
+    pinValue += digit;
+    updatePinDots();
+    if (pinValue.length === 4) setTimeout(checkPin, 150);
+  }
+
+  function pinClear() {
+    pinValue = pinValue.slice(0, -1);
+    updatePinDots();
+    document.getElementById("pin-error").textContent = "";
+  }
+
+  function pinCancel() {
+    document.getElementById("pin-modal").style.display = "none";
+    pinValue = "";
+  }
+
+  function updatePinDots() {
+    document.querySelectorAll(".pin-dot").forEach((d, i) => {
+      d.classList.toggle("filled", i < pinValue.length);
+    });
+  }
+
+  function checkPin() {
+    if (pinValue === ADMIN_PIN) {
+      document.getElementById("pin-modal").style.display = "none";
+      document.getElementById("tab-mgmt-btn").style.display = "";
+      showToast("🔓 관리자 모드 활성화");
+      switchTab("mgmt");
+    } else {
+      document.getElementById("pin-error").textContent = "PIN이 틀렸어요";
+      pinValue = "";
+      updatePinDots();
+    }
+  }
+
+  function exitAdmin() {
+    document.getElementById("tab-mgmt-btn").style.display = "none";
+    showToast("🔒 관리자 모드 종료");
+    switchTab("admin");
+  }
+
+  async function loadMgmtMembers() {
+    const res = await fetch("/api/members");
+    const members = await res.json();
+    const el = document.getElementById("mgmt-member-list");
+    el.innerHTML = members.length ? members.map(m => {
+      const sname = m.name.replace(/'/g, "\\'");
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #f1efe8">
+        <span style="font-size:14px;font-weight:500">${m.name}</span>
+        <span style="display:flex;gap:6px">
+          <button onclick="mgmtRename(${m.id},'${sname}')"
+            style="background:#f1efe8;border:none;border-radius:6px;padding:5px 11px;font-size:12px;cursor:pointer;color:#555">이름변경</button>
+          <button onclick="mgmtDelete(${m.id},'${sname}')"
+            style="background:#FDECEA;border:none;border-radius:6px;padding:5px 11px;font-size:12px;cursor:pointer;color:#C0392B">삭제</button>
+        </span>
+      </div>`;
+    }).join("") : '<div style="font-size:13px;color:#aaa">멤버 없음</div>';
+  }
+
+  async function mgmtAddMember() {
+    const input = document.getElementById("mgmt-new-name");
+    const name = input.value.trim();
+    if (!name) return showToast("이름을 입력해주세요");
+    const res = await fetch("/api/members/add", {
+      method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({name})
+    });
+    const d = await res.json();
+    if (d.error) return showToast("❌ " + d.error);
+    input.value = "";
+    showToast(`✅ "${name}" 추가됐어요`);
+    loadMgmtMembers();
+  }
+
+  async function mgmtRename(id, oldName) {
+    const newName = prompt(`"${oldName}" → 새 이름`, oldName);
+    if (!newName || newName.trim() === oldName) return;
+    const res = await fetch("/api/members/rename", {
+      method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({id, name: newName.trim()})
+    });
+    const d = await res.json();
+    if (d.error) return showToast("❌ " + d.error);
+    showToast(`✅ "${oldName}" → "${newName.trim()}" 변경됐어요`);
+    loadMgmtMembers();
+  }
+
+  async function mgmtDelete(id, name) {
+    if (!confirm(`"${name}" 멤버를 삭제할까요?`)) return;
+    const res = await fetch("/api/members/delete", {
+      method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({id})
+    });
+    const d = await res.json();
+    if (d.error) return showToast("❌ " + d.error);
+    showToast(`"${name}" 삭제됐어요`);
+    loadMgmtMembers();
+  }
+  // ─────────────────────────────────────────────────────────
 </script>
 </body>
 </html>
