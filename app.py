@@ -351,6 +351,136 @@ def api_member_delete():
     release_db(conn)
     return jsonify({"ok": True})
 
+@app.route("/api/team/assign", methods=["POST"])
+def api_team_assign():
+    """이전 달 출석 순위 기반으로 이번 달 팀 자동 배정 (뱀 드래프트)"""
+    now = date.today()
+    year, month = now.year, now.month
+
+    # 이미 배정됐으면 스킵
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT COUNT(*) as cnt FROM team_assignments WHERE year=%s AND month=%s", (year, month))
+    if cur.fetchone()["cnt"] > 0:
+        cur.close()
+        release_db(conn)
+        return jsonify({"error": "이미 이번 달 팀이 배정됐어요"}), 400
+
+    # 이전 달 출석 횟수 순위
+    prev_month = month - 1 if month > 1 else 12
+    prev_year = year if month > 1 else year - 1
+    last_day = calendar.monthrange(prev_year, prev_month)[1]
+    start = f"{prev_year}-{prev_month:02d}-01"
+    end = f"{prev_year}-{prev_month:02d}-{last_day}"
+
+    cur.execute("""
+        SELECT m.id, m.name, COUNT(a.id) as cnt
+        FROM members m
+        LEFT JOIN attendance a ON a.member_id = m.id AND a.date >= %s AND a.date <= %s
+        WHERE m.active = TRUE
+        GROUP BY m.id, m.name
+        ORDER BY cnt DESC, m.name
+    """, (start, end))
+    members = cur.fetchall()
+
+    # 뱀 드래프트: 1→A, 2→B, 3→A, 4→B ...
+    for i, m in enumerate(members):
+        team = "A" if i % 2 == 0 else "B"
+        cur.execute("""
+            INSERT INTO team_assignments (member_id, team, year, month)
+            VALUES (%s, %s, %s, %s) ON CONFLICT (member_id, year, month) DO NOTHING
+        """, (m["id"], team, year, month))
+
+    conn.commit()
+    cur.close()
+    release_db(conn)
+    return jsonify({"ok": True, "year": year, "month": month})
+
+@app.route("/api/team/months")
+def api_team_months():
+    """팀 배정이 존재하는 달 목록 (최신순)"""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT DISTINCT year, month FROM team_assignments
+        ORDER BY year DESC, month DESC
+    """)
+    months = [{"year": r["year"], "month": r["month"]} for r in cur.fetchall()]
+    cur.close()
+    release_db(conn)
+    return jsonify(months)
+
+@app.route("/api/team/assignments")
+def api_team_assignments():
+    """현재 달 팀 배정 현황"""
+    now = date.today()
+    year = int(request.args.get("year", now.year))
+    month = int(request.args.get("month", now.month))
+
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT m.name, ta.team
+        FROM team_assignments ta
+        JOIN members m ON ta.member_id = m.id
+        WHERE ta.year = %s AND ta.month = %s
+        ORDER BY ta.team, m.name
+    """, (year, month))
+    rows = cur.fetchall()
+    cur.close()
+    release_db(conn)
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/team/score")
+def api_team_score():
+    """이번 달 팀별 점수 (월~목 +1, 금~일 +2)"""
+    now = date.today()
+    year = int(request.args.get("year", now.year))
+    month = int(request.args.get("month", now.month))
+    last_day = calendar.monthrange(year, month)[1]
+    start = f"{year}-{month:02d}-01"
+    end = f"{year}-{month:02d}-{last_day}"
+
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    # 해당 달 출석 + 팀 배정 JOIN
+    cur.execute("""
+        SELECT m.name, ta.team, a.date
+        FROM attendance a
+        JOIN members m ON a.member_id = m.id
+        JOIN team_assignments ta ON ta.member_id = m.id AND ta.year = %s AND ta.month = %s
+        WHERE a.date >= %s AND a.date <= %s
+        ORDER BY ta.team, m.name, a.date
+    """, (year, month, start, end))
+    rows = cur.fetchall()
+    cur.close()
+    release_db(conn)
+
+    team_scores = {"A": 0, "B": 0}
+    team_members = {"A": {}, "B": {}}
+
+    for r in rows:
+        d = r["date"]
+        weekday = d.weekday()  # 0=월 ... 6=일
+        point = 2 if weekday >= 4 else 1  # 금(4)~일(6) +2, 나머지 +1
+        team = r["team"]
+        name = r["name"]
+        team_scores[team] += point
+        if name not in team_members[team]:
+            team_members[team][name] = 0
+        team_members[team][name] += point
+
+    return jsonify({
+        "year": year,
+        "month": month,
+        "scores": team_scores,
+        "members": {
+            team: [{"name": n, "score": s} for n, s in sorted(members.items(), key=lambda x: -x[1])]
+            for team, members in team_members.items()
+        }
+    })
+
 @app.route("/api/checkin", methods=["POST"])
 def api_checkin():
     data = request.json

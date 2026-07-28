@@ -79,6 +79,7 @@
   <div class="tab" onclick="switchTab('ranking')">랭킹</div>
   <div class="tab" onclick="switchTab('monthly')">출석표</div>
   <div class="tab" onclick="switchTab('alias')">별명관리</div>
+  <div class="tab" id="tab-team-btn" onclick="switchTab('team')" style="display:none">팀전</div>
   <div class="tab" id="tab-mgmt-btn" onclick="switchTab('mgmt')" style="display:none;color:#E24B4A">관리자</div>
 </div>
 
@@ -157,6 +158,19 @@
 </div>
 
 <!-- 관리자 탭 -->
+<!-- 팀전 탭 -->
+<div class="content" id="tab-team">
+  <div class="card" style="margin-bottom:8px;padding:6px 10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+      <button onclick="moveTeamMonth(-1)" style="background:#f1efe8;border:none;border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer;">‹</button>
+      <select id="team-month-select" onchange="selectTeamMonth(this.value)" style="flex:1;text-align:center;font-size:13px;font-weight:600;padding:5px;border:1px solid #e8e7e3;border-radius:6px;background:#fff;color:#2c2c2a;"></select>
+      <button onclick="moveTeamMonth(1)" style="background:#f1efe8;border:none;border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer;">›</button>
+    </div>
+  </div>
+  <div id="team-score-board"></div>
+  <div id="team-member-board"></div>
+</div>
+
 <div class="content" id="tab-mgmt">
   <div class="card">
     <div class="sec-title" style="margin-bottom:12px">➕ 멤버 추가</div>
@@ -171,6 +185,14 @@
   <div class="card">
     <div class="sec-title" style="margin-bottom:10px">👥 멤버 목록</div>
     <div id="mgmt-member-list"></div>
+  </div>
+  <div class="card">
+    <div class="sec-title" style="margin-bottom:6px">⚔️ 팀전 배정</div>
+    <div style="font-size:12px;color:#aaa;margin-bottom:12px">이전 달 출석 순위 기준으로 이번 달 폭팀/헬팀을 자동 배정해요</div>
+    <button onclick="assignTeam()"
+            style="width:100%;padding:10px;background:#2c2c2a;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">
+      이번 달 팀 배정하기
+    </button>
   </div>
   <button onclick="exitAdmin()"
           style="width:100%;padding:12px;background:#f1efe8;border:none;border-radius:10px;font-size:14px;color:#888;cursor:pointer;margin-top:4px">
@@ -214,7 +236,7 @@
   const today = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,"0")}-${String(yesterday.getDate()).padStart(2,"0")}`;
 
   function switchTab(name) {
-    ["admin","today","ranking","monthly","alias","mgmt"].forEach((n, i) => {
+    ["admin","today","ranking","monthly","alias","team","mgmt"].forEach((n, i) => {
       const tabEl = document.querySelectorAll(".tab")[i];
       if (tabEl) tabEl.classList.toggle("active", n === name);
       const contentEl = document.getElementById("tab-" + n);
@@ -224,6 +246,7 @@
     if (name === "monthly") loadMonthly();
     if (name === "alias") loadAliases();
     if (name === "mgmt") loadMgmtMembers();
+    if (name === "team") loadTeam();
   }
 
   function showToast(msg) {
@@ -545,6 +568,173 @@
     loadAliases();
   }
 
+  // ── 팀전 ──────────────────────────────────────────────────
+  // 이 날짜부터 팀전 탭이 모든 사람에게 보임 (그 전에는 관리자 모드에서만)
+  const TEAM_PUBLIC_FROM = new Date(2026, 7, 1); // 2026년 8월 1일
+
+  function isTeamPublic() {
+    return new Date() >= TEAM_PUBLIC_FROM;
+  }
+
+  function refreshTeamTabVisibility() {
+    const adminOn = document.getElementById("tab-mgmt-btn").style.display !== "none";
+    document.getElementById("tab-team-btn").style.display =
+            (isTeamPublic() || adminOn) ? "" : "none";
+  }
+
+  let teamMonths = [];
+  let teamMonthIdx = 0;
+
+  async function loadTeam() {
+    // 팀 배정이 있는 달 목록 로드
+    const res = await fetch("/api/team/months");
+    teamMonths = await res.json();
+
+    const now = new Date();
+    const curY = now.getFullYear(), curM = now.getMonth() + 1;
+
+    // 배정된 달이 없으면 이번 달만 (안내 문구용)
+    if (!teamMonths.length) {
+      teamMonths = [{year: curY, month: curM}];
+      teamMonthIdx = 0;
+    } else {
+      // 기본 선택: 이번 달이 목록에 있으면 그것, 없으면 가장 최근 달
+      const i = teamMonths.findIndex(t => t.year === curY && t.month === curM);
+      teamMonthIdx = i >= 0 ? i : 0;
+    }
+
+    renderTeamMonthSelect();
+    await renderTeam();
+  }
+
+  function renderTeamMonthSelect() {
+    const sel = document.getElementById("team-month-select");
+    sel.innerHTML = teamMonths.map((t, i) =>
+            `<option value="${i}" ${i === teamMonthIdx ? 'selected' : ''}>${t.year}년 ${t.month}월</option>`
+    ).join("");
+  }
+
+  async function selectTeamMonth(idx) {
+    teamMonthIdx = parseInt(idx);
+    await renderTeam();
+  }
+
+  async function moveTeamMonth(delta) {
+    // 목록은 최신순이므로 '다음 달'은 인덱스 감소
+    const next = teamMonthIdx - delta;
+    if (next < 0 || next >= teamMonths.length) return;
+    teamMonthIdx = next;
+    document.getElementById("team-month-select").value = teamMonthIdx;
+    await renderTeam();
+  }
+
+  async function renderTeam() {
+    const { year, month } = teamMonths[teamMonthIdx];
+
+    const [scoreRes, assignRes] = await Promise.all([
+      fetch(`/api/team/score?year=${year}&month=${month}`),
+      fetch(`/api/team/assignments?year=${year}&month=${month}`)
+    ]);
+    const score = await scoreRes.json();
+    const assignments = await assignRes.json();
+
+    const monthLabel = `${year}년 ${month}월`;
+    const nowD = new Date();
+    const isCurrentMonth = (year === nowD.getFullYear() && month === nowD.getMonth() + 1);
+    const hasTeam = assignments.length > 0;
+    const winner = score.scores.A > score.scores.B ? "A" : score.scores.B > score.scores.A ? "B" : null;
+
+    // 점수판
+    const scoreBoard = document.getElementById("team-score-board");
+    if (!hasTeam) {
+      scoreBoard.innerHTML = `
+        <div class="card" style="text-align:center">
+          <div style="font-size:15px;font-weight:700;margin-bottom:8px">⚔️ ${monthLabel} 팀전</div>
+          <div style="font-size:13px;color:#aaa;margin-bottom:16px">아직 팀이 배정되지 않았어요<br>관리자 모드에서 팀을 배정해주세요</div>
+        </div>`;
+      document.getElementById("team-member-board").innerHTML = "";
+      return;
+    }
+
+    const aScore = score.scores.A ?? 0;
+    const bScore = score.scores.B ?? 0;
+    const total = aScore + bScore || 1;
+    const aWidth = Math.round(aScore / total * 100);
+    const bWidth = 100 - aWidth;
+    const diff = Math.abs(aScore - bScore);
+
+    scoreBoard.innerHTML = `
+      <div class="card">
+        <div style="font-size:15px;font-weight:700;text-align:center;margin-bottom:16px">⚔️ ${monthLabel} 팀전</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">
+          <div style="text-align:center;flex:1">
+            <div style="font-size:13px;color:#aaa;margin-bottom:2px">💥 폭팀</div>
+            <div style="font-size:32px;font-weight:800;color:${winner==='A'?'#E24B4A':'#2c2c2a'}">${aScore}</div>
+            <div style="font-size:11px;color:#aaa">점</div>
+          </div>
+          <div style="font-size:20px;color:#ccc;padding:0 8px">VS</div>
+          <div style="text-align:center;flex:1">
+            <div style="font-size:13px;color:#aaa;margin-bottom:2px">🔥 헬팀</div>
+            <div style="font-size:32px;font-weight:800;color:${winner==='B'?'#1D9E75':'#2c2c2a'}">${bScore}</div>
+            <div style="font-size:11px;color:#aaa">점</div>
+          </div>
+        </div>
+        <div style="display:flex;border-radius:8px;overflow:hidden;height:12px;gap:2px">
+          <div style="width:${aWidth}%;background:#E24B4A;border-radius:8px 0 0 8px;transition:width 0.5s"></div>
+          <div style="width:${bWidth}%;background:#1D9E75;border-radius:0 8px 8px 0;transition:width 0.5s"></div>
+        </div>
+        ${winner ? `<div style="text-align:center;margin-top:10px;font-size:13px;font-weight:600;color:${winner==='A'?'#E24B4A':'#1D9E75'}">🏆 ${winner==='A'?'폭팀':'헬팀'} ${diff}점 ${isCurrentMonth ? '리드!' : '승리!'}</div>` : '<div style="text-align:center;margin-top:10px;font-size:13px;color:#aaa">🤝 동점!</div>'}
+        <div style="font-size:11px;color:#bbb;text-align:center;margin-top:8px">월~목 출석 +1점 · 금~일 출석 +2점</div>
+      </div>`;
+
+    // 멤버별 점수
+    const memberBoard = document.getElementById("team-member-board");
+    const aMembers = score.members.A ?? [];
+    const bMembers = score.members.B ?? [];
+
+    // 팀 배정은 됐지만 아직 출석 없는 멤버도 0점으로 표시
+    const aNames = new Set(aMembers.map(m => m.name));
+    const bNames = new Set(bMembers.map(m => m.name));
+    assignments.forEach(a => {
+      if (a.team === "A" && !aNames.has(a.name)) aMembers.push({name: a.name, score: 0});
+      if (a.team === "B" && !bNames.has(a.name)) bMembers.push({name: a.name, score: 0});
+    });
+    // 0점 멤버가 뒤에 붙었으므로 점수 내림차순 재정렬
+    aMembers.sort((x, y) => y.score - x.score);
+    bMembers.sort((x, y) => y.score - x.score);
+
+    const renderMembers = (members, team) => {
+      const color = team === 'A' ? '#E24B4A' : '#1D9E75';
+      return members.map((m, i) =>
+              `<div style="display:flex;align-items:center;gap:6px;padding:7px 0;${i < members.length-1 ? 'border-bottom:1px solid #f1efe8' : ''}">
+          <span style="font-size:11px;color:#bbb;width:14px">${i+1}</span>
+          <span style="font-size:13px;flex:1;${m.score===0?'color:#bbb':''}">${i===0 && m.score>0 ? '👑 ' : ''}${m.name}</span>
+          <span style="font-size:13px;${m.score===0 ? 'color:#ccc' : `font-weight:600;color:${color}`}">${m.score}</span>
+        </div>`
+      ).join("");
+    };
+
+    memberBoard.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="card" style="padding:12px">
+          <div style="font-size:13px;font-weight:700;color:#E24B4A;margin-bottom:8px">💥 폭팀 <span style="color:#bbb;font-weight:400">${aMembers.length}명</span></div>
+          ${aMembers.length ? renderMembers(aMembers, 'A') : '<div style="font-size:12px;color:#aaa">없음</div>'}
+        </div>
+        <div class="card" style="padding:12px">
+          <div style="font-size:13px;font-weight:700;color:#1D9E75;margin-bottom:8px">🔥 헬팀 <span style="color:#bbb;font-weight:400">${bMembers.length}명</span></div>
+          ${bMembers.length ? renderMembers(bMembers, 'B') : '<div style="font-size:12px;color:#aaa">없음</div>'}
+        </div>
+      </div>`;
+  }
+
+  async function assignTeam() {
+    const res = await fetch("/api/team/assign", {method: "POST"});
+    const d = await res.json();
+    if (d.error) return showToast("❌ " + d.error);
+    showToast("✅ 팀 배정 완료!");
+    loadTeam();
+  }
+  // ─────────────────────────────────────────────────────────
   // ── 관리자 모드 ───────────────────────────────────────────
   const ADMIN_PIN = "0531";
   let adminTapCount = 0, adminTapTimer = null, pinValue = "";
@@ -597,6 +787,7 @@
     if (pinValue === ADMIN_PIN) {
       document.getElementById("pin-modal").style.display = "none";
       document.getElementById("tab-mgmt-btn").style.display = "";
+      refreshTeamTabVisibility();
       showToast("🔓 관리자 모드 활성화");
       switchTab("mgmt");
     } else {
@@ -608,6 +799,7 @@
 
   function exitAdmin() {
     document.getElementById("tab-mgmt-btn").style.display = "none";
+    refreshTeamTabVisibility();
     showToast("🔒 관리자 모드 종료");
     switchTab("admin");
   }
@@ -667,6 +859,9 @@
     loadMgmtMembers();
   }
   // ─────────────────────────────────────────────────────────
+
+  // 모든 선언 이후에 실행 (TEAM_PUBLIC_FROM 초기화 완료 후)
+  refreshTeamTabVisibility();
 </script>
 </body>
 </html>
