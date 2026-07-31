@@ -353,44 +353,54 @@ def api_member_delete():
 
 @app.route("/api/team/assign", methods=["POST"])
 def api_team_assign():
-    """이전 달 출석 순위 기반으로 이번 달 팀 자동 배정 (뱀 드래프트)"""
+    """팀 직접 지정 저장. 해당 월 배정을 통째로 덮어씀 (재편성 가능)
+    body: {year, month, assignments: [{member_id, team}]}  team은 'A'(폭팀) 또는 'B'(헬팀)"""
+    data = request.json or {}
     now = date.today()
-    year, month = now.year, now.month
+    year = int(data.get("year", now.year))
+    month = int(data.get("month", now.month))
+    assignments = data.get("assignments", [])
 
-    # 이미 배정됐으면 스킵
+    # 유효성 검사 ('A'/'B' 아닌 값은 버림)
+    cleaned = []
+    for a in assignments:
+        mid = a.get("member_id")
+        team = a.get("team")
+        if not mid or team not in ("A", "B"):
+            continue
+        cleaned.append((int(mid), team))
+
+    if not cleaned:
+        return jsonify({"error": "팀에 지정된 멤버가 없어요"}), 400
+
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT COUNT(*) as cnt FROM team_assignments WHERE year=%s AND month=%s", (year, month))
-    if cur.fetchone()["cnt"] > 0:
-        cur.close()
-        release_db(conn)
-        return jsonify({"error": "이미 이번 달 팀이 배정됐어요"}), 400
-
-    # 이전 달 출석 횟수 순위
-    prev_month = month - 1 if month > 1 else 12
-    prev_year = year if month > 1 else year - 1
-    last_day = calendar.monthrange(prev_year, prev_month)[1]
-    start = f"{prev_year}-{prev_month:02d}-01"
-    end = f"{prev_year}-{prev_month:02d}-{last_day}"
-
-    cur.execute("""
-        SELECT m.id, m.name, COUNT(a.id) as cnt
-        FROM members m
-        LEFT JOIN attendance a ON a.member_id = m.id AND a.date >= %s AND a.date <= %s
-        WHERE m.active = TRUE
-        GROUP BY m.id, m.name
-        ORDER BY cnt DESC, m.name
-    """, (start, end))
-    members = cur.fetchall()
-
-    # 뱀 드래프트: 1→A, 2→B, 3→A, 4→B ...
-    for i, m in enumerate(members):
-        team = "A" if i % 2 == 0 else "B"
+    cur = conn.cursor()
+    # 기존 배정 삭제 후 재삽입 (미참가로 바뀐 멤버도 함께 정리됨)
+    cur.execute("DELETE FROM team_assignments WHERE year=%s AND month=%s", (year, month))
+    for mid, team in cleaned:
         cur.execute("""
-            INSERT INTO team_assignments (member_id, team, year, month)
-            VALUES (%s, %s, %s, %s) ON CONFLICT (member_id, year, month) DO NOTHING
-        """, (m["id"], team, year, month))
+                    INSERT INTO team_assignments (member_id, team, year, month)
+                    VALUES (%s, %s, %s, %s) ON CONFLICT (member_id, year, month) DO NOTHING
+                    """, (mid, team, year, month))
+    conn.commit()
+    cur.close()
+    release_db(conn)
 
+    a_cnt = sum(1 for _, t in cleaned if t == "A")
+    return jsonify({"ok": True, "year": year, "month": month,
+                    "pok": a_cnt, "hell": len(cleaned) - a_cnt})
+
+@app.route("/api/team/clear", methods=["POST"])
+def api_team_clear():
+    """해당 월 팀 편성 전체 삭제"""
+    data = request.json or {}
+    now = date.today()
+    year = int(data.get("year", now.year))
+    month = int(data.get("month", now.month))
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM team_assignments WHERE year=%s AND month=%s", (year, month))
     conn.commit()
     cur.close()
     release_db(conn)
@@ -402,9 +412,9 @@ def api_team_months():
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
-        SELECT DISTINCT year, month FROM team_assignments
-        ORDER BY year DESC, month DESC
-    """)
+                SELECT DISTINCT year, month FROM team_assignments
+                ORDER BY year DESC, month DESC
+                """)
     months = [{"year": r["year"], "month": r["month"]} for r in cur.fetchall()]
     cur.close()
     release_db(conn)
@@ -420,12 +430,12 @@ def api_team_assignments():
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
-        SELECT m.name, ta.team
-        FROM team_assignments ta
-        JOIN members m ON ta.member_id = m.id
-        WHERE ta.year = %s AND ta.month = %s
-        ORDER BY ta.team, m.name
-    """, (year, month))
+                SELECT ta.member_id, m.name, ta.team
+                FROM team_assignments ta
+                         JOIN members m ON ta.member_id = m.id
+                WHERE ta.year = %s AND ta.month = %s
+                ORDER BY ta.team, m.name
+                """, (year, month))
     rows = cur.fetchall()
     cur.close()
     release_db(conn)
@@ -446,13 +456,13 @@ def api_team_score():
 
     # 해당 달 출석 + 팀 배정 JOIN
     cur.execute("""
-        SELECT m.name, ta.team, a.date
-        FROM attendance a
-        JOIN members m ON a.member_id = m.id
-        JOIN team_assignments ta ON ta.member_id = m.id AND ta.year = %s AND ta.month = %s
-        WHERE a.date >= %s AND a.date <= %s
-        ORDER BY ta.team, m.name, a.date
-    """, (year, month, start, end))
+                SELECT m.name, ta.team, a.date
+                FROM attendance a
+                         JOIN members m ON a.member_id = m.id
+                         JOIN team_assignments ta ON ta.member_id = m.id AND ta.year = %s AND ta.month = %s
+                WHERE a.date >= %s AND a.date <= %s
+                ORDER BY ta.team, m.name, a.date
+                """, (year, month, start, end))
     rows = cur.fetchall()
     cur.close()
     release_db(conn)

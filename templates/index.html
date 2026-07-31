@@ -66,6 +66,10 @@
     .pin-dot.filled { background: #2c2c2a; }
     .pin-btn { padding: 14px; font-size: 18px; font-weight: 600; background: #f5f4f0; border: none; border-radius: 10px; cursor: pointer; }
     .pin-btn:active { background: #e8e7e3; }
+    .tsel { border: 1.5px solid #e8e7e3; background: #fff; color: #999; border-radius: 6px; padding: 4px 9px; font-size: 12px; cursor: pointer; }
+    .tsel.on-pok { background: #FDECEA; border-color: #E24B4A; color: #C0392B; font-weight: 700; }
+    .tsel.on-hell { background: #E1F5EE; border-color: #1D9E75; color: #085041; font-weight: 700; }
+    .tsel.on-none { background: #f1efe8; border-color: #ccc; color: #666; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -187,11 +191,22 @@
     <div id="mgmt-member-list"></div>
   </div>
   <div class="card">
-    <div class="sec-title" style="margin-bottom:6px">⚔️ 팀전 배정</div>
-    <div style="font-size:12px;color:#aaa;margin-bottom:12px">이전 달 출석 순위 기준으로 이번 달 폭팀/헬팀을 자동 배정해요</div>
-    <button onclick="assignTeam()"
+    <div class="sec-title" style="margin-bottom:6px">⚔️ 팀전 편성</div>
+    <div style="font-size:12px;color:#aaa;margin-bottom:10px">멤버별로 팀을 지정하세요. 미참가는 팀전에서 제외돼요.</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:10px">
+      <button onclick="moveAssignMonth(-1)" style="background:#f1efe8;border:none;border-radius:6px;padding:5px 12px;font-size:14px;cursor:pointer">‹</button>
+      <div id="team-assign-month" style="flex:1;text-align:center;font-size:14px;font-weight:700"></div>
+      <button onclick="moveAssignMonth(1)" style="background:#f1efe8;border:none;border-radius:6px;padding:5px 12px;font-size:14px;cursor:pointer">›</button>
+    </div>
+    <div id="team-assign-list"></div>
+    <div id="team-assign-summary" style="font-size:12px;color:#888;text-align:center;margin:10px 0"></div>
+    <button onclick="saveTeamAssign()"
             style="width:100%;padding:10px;background:#2c2c2a;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">
-      이번 달 팀 배정하기
+      팀 편성 저장
+    </button>
+    <button onclick="clearTeamAssign()"
+            style="width:100%;padding:9px;background:#FDECEA;color:#C0392B;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-top:6px">
+      이 달 편성 삭제
     </button>
   </div>
   <button onclick="exitAdmin()"
@@ -245,7 +260,7 @@
     if (name === "ranking") loadRanking();
     if (name === "monthly") loadMonthly();
     if (name === "alias") loadAliases();
-    if (name === "mgmt") loadMgmtMembers();
+    if (name === "mgmt") { loadMgmtMembers(); loadTeamAssign(); }
     if (name === "team") loadTeam();
   }
 
@@ -727,12 +742,114 @@
       </div>`;
   }
 
-  async function assignTeam() {
-    const res = await fetch("/api/team/assign", {method: "POST"});
+  // 팀 편성 (관리자) — memberId → 'A'(폭팀) | 'B'(헬팀) | null(미참가)
+  let teamPick = {};
+  let teamPickMembers = [];
+  let assignYear = null, assignMonth = null;
+
+  async function loadTeamAssign() {
+    // 처음 열 때만 이번 달로 초기화 (월 이동 중이면 유지)
+    if (assignYear === null) {
+      const now = new Date();
+      assignYear = now.getFullYear();
+      assignMonth = now.getMonth() + 1;
+    }
+    await fetchTeamAssign();
+  }
+
+  async function moveAssignMonth(delta) {
+    assignMonth += delta;
+    if (assignMonth > 12) { assignMonth = 1; assignYear++; }
+    if (assignMonth < 1)  { assignMonth = 12; assignYear--; }
+    await fetchTeamAssign();
+  }
+
+  async function fetchTeamAssign() {
+    const now = new Date();
+    const isCur = (assignYear === now.getFullYear() && assignMonth === now.getMonth() + 1);
+    const isFuture = (assignYear > now.getFullYear()) ||
+            (assignYear === now.getFullYear() && assignMonth > now.getMonth() + 1);
+    const tag = isCur ? " (이번 달)" : (isFuture ? " (예정)" : " (지난달)");
+    document.getElementById("team-assign-month").textContent =
+            `${assignYear}년 ${assignMonth}월${tag}`;
+
+    const [mres, ares] = await Promise.all([
+      fetch("/api/members"),
+      fetch(`/api/team/assignments?year=${assignYear}&month=${assignMonth}`)
+    ]);
+    teamPickMembers = await mres.json();
+    const assigned = await ares.json();
+
+    // 기존 편성 프리필
+    teamPick = {};
+    teamPickMembers.forEach(mem => { teamPick[mem.id] = null; });
+    assigned.forEach(a => {
+      if (a.member_id in teamPick) teamPick[a.member_id] = a.team;
+    });
+
+    renderTeamAssign();
+  }
+
+  function renderTeamAssign() {
+    const el = document.getElementById("team-assign-list");
+    if (!teamPickMembers.length) {
+      el.innerHTML = '<div style="font-size:13px;color:#aaa">멤버 없음</div>';
+      document.getElementById("team-assign-summary").textContent = "";
+      return;
+    }
+    el.innerHTML = teamPickMembers.map(mem => {
+      const v = teamPick[mem.id];
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f1efe8">
+        <span style="font-size:14px;font-weight:500">${mem.name}</span>
+        <span style="display:flex;gap:4px">
+          <button class="tsel ${v==='A'?'on-pok':''}"  onclick="pickTeam(${mem.id},'A')">폭팀</button>
+          <button class="tsel ${v==='B'?'on-hell':''}" onclick="pickTeam(${mem.id},'B')">헬팀</button>
+          <button class="tsel ${v===null?'on-none':''}" onclick="pickTeam(${mem.id},null)">미참가</button>
+        </span>
+      </div>`;
+    }).join("");
+
+    const a = Object.values(teamPick).filter(v => v === 'A').length;
+    const b = Object.values(teamPick).filter(v => v === 'B').length;
+    const n = Object.values(teamPick).filter(v => v === null).length;
+    let msg = `💥 폭팀 ${a}명 · 🔥 헬팀 ${b}명 · 미참가 ${n}명`;
+    if (a !== b && (a || b)) msg += `  ⚠️ 인원 불균형`;
+    document.getElementById("team-assign-summary").textContent = msg;
+  }
+
+  function pickTeam(memberId, team) {
+    teamPick[memberId] = team;
+    renderTeamAssign();
+  }
+
+  async function saveTeamAssign() {
+    const assignments = Object.entries(teamPick)
+            .filter(([, t]) => t === 'A' || t === 'B')
+            .map(([id, t]) => ({member_id: parseInt(id), team: t}));
+
+    if (!assignments.length) return showToast("팀에 지정된 멤버가 없어요");
+
+    const res = await fetch("/api/team/assign", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({year: assignYear, month: assignMonth, assignments})
+    });
     const d = await res.json();
     if (d.error) return showToast("❌ " + d.error);
-    showToast("✅ 팀 배정 완료!");
-    loadTeam();
+    showToast(`✅ ${assignMonth}월 저장 완료 (폭팀 ${d.pok}명 · 헬팀 ${d.hell}명)`);
+  }
+
+  async function clearTeamAssign() {
+    if (!confirm(`${assignYear}년 ${assignMonth}월 팀 편성을 삭제할까요?\n출석 기록은 그대로 유지됩니다.`)) return;
+    const res = await fetch("/api/team/clear", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({year: assignYear, month: assignMonth})
+    });
+    const d = await res.json();
+    if (d.error) return showToast("❌ " + d.error);
+    showToast(`${assignMonth}월 편성 삭제됐어요`);
+    await fetchTeamAssign();
   }
   // ─────────────────────────────────────────────────────────
   // ── 관리자 모드 ───────────────────────────────────────────
@@ -834,6 +951,7 @@
     input.value = "";
     showToast(`✅ "${name}" 추가됐어요`);
     loadMgmtMembers();
+    loadTeamAssign();
   }
 
   async function mgmtRename(id, oldName) {
@@ -846,6 +964,7 @@
     if (d.error) return showToast("❌ " + d.error);
     showToast(`✅ "${oldName}" → "${newName.trim()}" 변경됐어요`);
     loadMgmtMembers();
+    loadTeamAssign();
   }
 
   async function mgmtDelete(id, name) {
@@ -857,6 +976,7 @@
     if (d.error) return showToast("❌ " + d.error);
     showToast(`"${name}" 삭제됐어요`);
     loadMgmtMembers();
+    loadTeamAssign();
   }
   // ─────────────────────────────────────────────────────────
 
