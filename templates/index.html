@@ -164,13 +164,6 @@
 <!-- 관리자 탭 -->
 <!-- 팀전 탭 -->
 <div class="content active" id="tab-team">
-  <div class="card" style="margin-bottom:8px;padding:6px 10px">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
-      <button onclick="moveTeamMonth(-1)" style="background:#f1efe8;border:none;border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer;">‹</button>
-      <select id="team-month-select" onchange="selectTeamMonth(this.value)" style="flex:1;text-align:center;font-size:13px;font-weight:600;padding:5px;border:1px solid #e8e7e3;border-radius:6px;background:#fff;color:#2c2c2a;"></select>
-      <button onclick="moveTeamMonth(1)" style="background:#f1efe8;border:none;border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer;">›</button>
-    </div>
-  </div>
   <div id="team-score-board"></div>
   <div id="team-member-board"></div>
 </div>
@@ -208,6 +201,15 @@
             style="width:100%;padding:9px;background:#FDECEA;color:#C0392B;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-top:6px">
       이 달 편성 삭제
     </button>
+  </div>
+  <div class="card">
+    <div class="sec-title" style="margin-bottom:6px">📅 팀전 조회 월</div>
+    <div style="font-size:12px;color:#aaa;margin-bottom:10px">팀전 탭에 표시할 월이에요. 지난달 결과를 볼 때 바꿔주세요.</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+      <button onclick="moveTeamMonth(-1)" style="background:#f1efe8;border:none;border-radius:6px;padding:5px 12px;font-size:14px;cursor:pointer">‹</button>
+      <select id="team-month-select" onchange="selectTeamMonth(this.value)" style="flex:1;text-align:center;font-size:13px;font-weight:600;padding:6px;border:1px solid #e8e7e3;border-radius:6px;background:#fff;color:#2c2c2a;"></select>
+      <button onclick="moveTeamMonth(1)" style="background:#f1efe8;border:none;border-radius:6px;padding:5px 12px;font-size:14px;cursor:pointer">›</button>
+    </div>
   </div>
   <button onclick="exitAdmin()"
           style="width:100%;padding:12px;background:#f1efe8;border:none;border-radius:10px;font-size:14px;color:#888;cursor:pointer;margin-top:4px">
@@ -260,7 +262,7 @@
     if (name === "ranking") loadRanking();
     if (name === "monthly") loadMonthly();
     if (name === "alias") loadAliases();
-    if (name === "mgmt") { loadMgmtMembers(); loadTeamAssign(); }
+    if (name === "mgmt") { loadMgmtMembers(); loadTeamAssign(); renderTeamMonthSelect(); }
     if (name === "team") loadTeam();
   }
 
@@ -611,6 +613,7 @@
 
   function renderTeamMonthSelect() {
     const sel = document.getElementById("team-month-select");
+    if (!sel) return;
     sel.innerHTML = teamMonths.map((t, i) =>
             `<option value="${i}" ${i === teamMonthIdx ? 'selected' : ''}>${t.year}년 ${t.month}월</option>`
     ).join("");
@@ -626,7 +629,8 @@
     const next = teamMonthIdx - delta;
     if (next < 0 || next >= teamMonths.length) return;
     teamMonthIdx = next;
-    document.getElementById("team-month-select").value = teamMonthIdx;
+    const sel = document.getElementById("team-month-select");
+    if (sel) sel.value = teamMonthIdx;
     await renderTeam();
   }
 
@@ -824,6 +828,7 @@
     const d = await res.json();
     if (d.error) return showToast("❌ " + d.error);
     showToast(`✅ ${assignMonth}월 저장 완료 (폭팀 ${d.pok}명 · 헬팀 ${d.hell}명)`);
+    loadTeam();   // 조회 월 목록 + 팀전 화면 갱신
   }
 
   async function clearTeamAssign() {
@@ -837,6 +842,7 @@
     if (d.error) return showToast("❌ " + d.error);
     showToast(`${assignMonth}월 편성 삭제됐어요`);
     await fetchTeamAssign();
+    loadTeam();   // 조회 월 목록 + 팀전 화면 갱신
   }
   // ─────────────────────────────────────────────────────────
   // ── 관리자 모드 ───────────────────────────────────────────
