@@ -78,12 +78,12 @@
   <div class="date" id="header-date"></div>
 </div>
 <div class="tabs">
+  <div class="tab" onclick="switchTab('team')">팀전</div>
   <div class="tab active" onclick="switchTab('admin')">출석입력</div>
   <div class="tab" onclick="switchTab('today')">어제</div>
   <div class="tab" onclick="switchTab('ranking')">랭킹</div>
   <div class="tab" onclick="switchTab('monthly')">출석표</div>
   <div class="tab" onclick="switchTab('alias')">별명관리</div>
-  <div class="tab" id="tab-team-btn" onclick="switchTab('team')" style="display:none">팀전</div>
   <div class="tab" id="tab-mgmt-btn" onclick="switchTab('mgmt')" style="display:none;color:#E24B4A">관리자</div>
 </div>
 
@@ -251,7 +251,7 @@
   const today = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,"0")}-${String(yesterday.getDate()).padStart(2,"0")}`;
 
   function switchTab(name) {
-    ["admin","today","ranking","monthly","alias","team","mgmt"].forEach((n, i) => {
+    ["team","admin","today","ranking","monthly","alias","mgmt"].forEach((n, i) => {
       const tabEl = document.querySelectorAll(".tab")[i];
       if (tabEl) tabEl.classList.toggle("active", n === name);
       const contentEl = document.getElementById("tab-" + n);
@@ -584,19 +584,6 @@
   }
 
   // ── 팀전 ──────────────────────────────────────────────────
-  // 이 날짜부터 팀전 탭이 모든 사람에게 보임 (그 전에는 관리자 모드에서만)
-  const TEAM_PUBLIC_FROM = new Date(2026, 7, 1); // 2026년 8월 1일
-
-  function isTeamPublic() {
-    return new Date() >= TEAM_PUBLIC_FROM;
-  }
-
-  function refreshTeamTabVisibility() {
-    const adminOn = document.getElementById("tab-mgmt-btn").style.display !== "none";
-    document.getElementById("tab-team-btn").style.display =
-            (isTeamPublic() || adminOn) ? "" : "none";
-  }
-
   let teamMonths = [];
   let teamMonthIdx = 0;
 
@@ -904,7 +891,6 @@
     if (pinValue === ADMIN_PIN) {
       document.getElementById("pin-modal").style.display = "none";
       document.getElementById("tab-mgmt-btn").style.display = "";
-      refreshTeamTabVisibility();
       showToast("🔓 관리자 모드 활성화");
       switchTab("mgmt");
     } else {
@@ -916,7 +902,6 @@
 
   function exitAdmin() {
     document.getElementById("tab-mgmt-btn").style.display = "none";
-    refreshTeamTabVisibility();
     showToast("🔒 관리자 모드 종료");
     switchTab("admin");
   }
@@ -979,9 +964,6 @@
     loadTeamAssign();
   }
   // ─────────────────────────────────────────────────────────
-
-  // 모든 선언 이후에 실행 (TEAM_PUBLIC_FROM 초기화 완료 후)
-  refreshTeamTabVisibility();
 </script>
 </body>
 </html>
