@@ -657,31 +657,59 @@
     const aScore = score.scores.A ?? 0;
     const bScore = score.scores.B ?? 0;
     const total = aScore + bScore || 1;
-    const aWidth = Math.round(aScore / total * 100);
-    const bWidth = 100 - aWidth;
+    const aPct = Math.round(aScore / total * 100);
+    const bPct = 100 - aPct;
     const diff = Math.abs(aScore - bScore);
 
+    // 남은 일수 (진행 중인 달만)
+    const lastDay = new Date(year, month, 0).getDate();
+    const daysLeft = isCurrentMonth ? (lastDay - nowD.getDate()) : 0;
+    const daysBadge = isCurrentMonth && daysLeft > 0
+            ? `<span style="background:#f1efe8;color:#888;font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px">${daysLeft}일 남음</span>`
+            : (isCurrentMonth
+                    ? `<span style="background:#f1efe8;color:#888;font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px">마지막 날</span>`
+                    : `<span style="background:#f1efe8;color:#888;font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px">종료</span>`);
+
+    const banner = winner
+            ? `<div style="text-align:center;margin-top:12px;background:${winner==='A'?'#FDECEA':'#E1F5EE'};border-radius:8px;padding:8px">
+           <span style="font-size:13px;font-weight:700;color:${winner==='A'?'#C0392B':'#085041'}">🏆 ${winner==='A'?'A팀':'B팀'} ${diff}점 ${isCurrentMonth ? '리드' : '승리'}</span>
+         </div>`
+            : `<div style="text-align:center;margin-top:12px;background:#f1efe8;border-radius:8px;padding:8px">
+           <span style="font-size:13px;font-weight:700;color:#888">🤝 동점</span>
+         </div>`;
+
     scoreBoard.innerHTML = `
-      <div class="card">
-        <div style="font-size:15px;font-weight:700;text-align:center;margin-bottom:16px">⚔️ ${monthLabel} 팀전</div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">
-          <div style="text-align:center;flex:1">
-            <div style="font-size:13px;color:#aaa;margin-bottom:2px">A팀</div>
-            <div style="font-size:32px;font-weight:800;color:${winner==='A'?'#E24B4A':'#2c2c2a'}">${aScore}</div>
-            <div style="font-size:11px;color:#aaa">점</div>
+      <div class="card" style="padding:18px 14px 16px">
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:18px">
+          <span style="font-size:13px;font-weight:700">⚔️ ${monthLabel} 팀전</span>
+          ${daysBadge}
+        </div>
+
+        <div style="display:flex;align-items:center;margin-bottom:16px">
+          <div style="flex:1;text-align:center">
+            <div style="font-size:12px;color:#E24B4A;font-weight:700;margin-bottom:4px">A팀</div>
+            <div style="font-size:46px;font-weight:800;line-height:1;color:${winner==='B' ? '#C9BEBD' : '#E24B4A'}">${aScore}</div>
           </div>
-          <div style="font-size:20px;color:#ccc;padding:0 8px">VS</div>
-          <div style="text-align:center;flex:1">
-            <div style="font-size:13px;color:#aaa;margin-bottom:2px">B팀</div>
-            <div style="font-size:32px;font-weight:800;color:${winner==='B'?'#1D9E75':'#2c2c2a'}">${bScore}</div>
-            <div style="font-size:11px;color:#aaa">점</div>
+          <div style="width:44px;text-align:center">
+            <div style="background:#2c2c2a;color:#fff;font-size:11px;font-weight:800;border-radius:12px;padding:3px 0">VS</div>
+          </div>
+          <div style="flex:1;text-align:center">
+            <div style="font-size:12px;color:#1D9E75;font-weight:700;margin-bottom:4px">B팀</div>
+            <div style="font-size:46px;font-weight:800;line-height:1;color:${winner==='A' ? '#9FB8B0' : '#1D9E75'}">${bScore}</div>
           </div>
         </div>
-        <div style="display:flex;border-radius:8px;overflow:hidden;height:12px;gap:2px">
-          <div style="width:${aWidth}%;background:#E24B4A;border-radius:8px 0 0 8px;transition:width 0.5s"></div>
-          <div style="width:${bWidth}%;background:#1D9E75;border-radius:0 8px 8px 0;transition:width 0.5s"></div>
+
+        <div style="position:relative;height:20px;border-radius:10px;overflow:hidden;background:#f1efe8;display:flex">
+          <div style="width:${aPct}%;background:linear-gradient(90deg,#E24B4A,#EF7A6E);display:flex;align-items:center;padding-left:8px;transition:width 0.5s">
+            ${aPct >= 18 ? `<span style="font-size:10px;color:#fff;font-weight:700">${aPct}%</span>` : ''}
+          </div>
+          <div style="width:${bPct}%;background:linear-gradient(90deg,#3FB894,#1D9E75);display:flex;align-items:center;justify-content:flex-end;padding-right:8px;transition:width 0.5s">
+            ${bPct >= 18 ? `<span style="font-size:10px;color:#fff;font-weight:700">${bPct}%</span>` : ''}
+          </div>
+          <div style="position:absolute;left:50%;top:0;bottom:0;width:2px;background:rgba(255,255,255,0.85)"></div>
         </div>
-        ${winner ? `<div style="text-align:center;margin-top:12px;background:${winner==='A'?'#FDECEA':'#E1F5EE'};border-radius:8px;padding:8px"><span style="font-size:13px;font-weight:700;color:${winner==='A'?'#C0392B':'#085041'}">🏆 ${winner==='A'?'A팀':'B팀'} ${diff}점 ${isCurrentMonth ? '리드' : '승리'}</span></div>` : '<div style="text-align:center;margin-top:12px;background:#f1efe8;border-radius:8px;padding:8px"><span style="font-size:13px;font-weight:700;color:#888">🤝 동점</span></div>'}
+
+        ${banner}
       </div>`;
 
     // 멤버별 점수
@@ -701,25 +729,45 @@
     bMembers.sort((x, y) => y.score - x.score);
 
     const renderMembers = (members, team) => {
-      const color = team === 'A' ? '#E24B4A' : '#1D9E75';
-      return members.map((m, i) =>
-              `<div style="display:flex;align-items:center;gap:6px;padding:7px 0;${i < members.length-1 ? 'border-bottom:1px solid #f1efe8' : ''}">
-          <span style="font-size:11px;color:#bbb;width:14px">${i+1}</span>
-          <span style="font-size:13px;flex:1;${m.score===0?'color:#bbb':''}">${i===0 && m.score>0 ? '👑 ' : ''}${m.name}</span>
-          <span style="font-size:13px;${m.score===0 ? 'color:#ccc' : `font-weight:600;color:${color}`}">${m.score}</span>
-        </div>`
-      ).join("");
+      const strong = team === 'A' ? '#E24B4A' : '#1D9E75';
+      const mid    = team === 'A' ? '#E8756F' : '#3FB894';
+      const soft   = team === 'A' ? '#F0A9A4' : '#7FD5B8';
+      const topScore = members[0]?.score || 1;
+      return members.map((m, i) => {
+        const w = m.score > 0 ? Math.round(m.score / topScore * 100) : 0;
+        const barColor = i === 0 ? strong : (i < 3 ? mid : soft);
+        return `<div style="display:flex;align-items:center;gap:6px;padding:5px 0">
+            ${i === 0 && m.score > 0
+                ? '<span style="font-size:12px">👑</span>'
+                : `<span style="font-size:10px;color:${m.score===0?'#ddd':'#bbb'};width:12px;text-align:center">${i+1}</span>`}
+            <span style="font-size:13px;flex:1;${m.score===0?'color:#ccc':(i===0?'font-weight:600':'')}">${m.name}</span>
+            <span style="font-size:13px;${m.score===0 ? 'color:#ddd' : `font-weight:700;color:${strong}`}">${m.score}</span>
+          </div>
+          <div style="height:3px;background:#f1efe8;border-radius:2px;margin-bottom:5px">
+            <div style="width:${w}%;height:3px;background:${barColor};border-radius:2px;transition:width 0.4s"></div>
+          </div>`;
+      }).join("");
     };
 
     memberBoard.innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="card" style="padding:12px">
-          <div style="font-size:13px;font-weight:700;color:#E24B4A;margin-bottom:8px">A팀 <span style="color:#bbb;font-weight:400">${aMembers.length}명</span></div>
-          ${aMembers.length ? renderMembers(aMembers, 'A') : '<div style="font-size:12px;color:#aaa">없음</div>'}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+        <div style="background:#fff;border-radius:12px;overflow:hidden">
+          <div style="background:#E24B4A;padding:8px 11px;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:12px;font-weight:800;color:#fff">A팀</span>
+            <span style="font-size:10px;color:rgba(255,255,255,0.85)">${aScore}점</span>
+          </div>
+          <div style="padding:10px 11px">
+            ${aMembers.length ? renderMembers(aMembers, 'A') : '<div style="font-size:12px;color:#aaa">없음</div>'}
+          </div>
         </div>
-        <div class="card" style="padding:12px">
-          <div style="font-size:13px;font-weight:700;color:#1D9E75;margin-bottom:8px">B팀 <span style="color:#bbb;font-weight:400">${bMembers.length}명</span></div>
-          ${bMembers.length ? renderMembers(bMembers, 'B') : '<div style="font-size:12px;color:#aaa">없음</div>'}
+        <div style="background:#fff;border-radius:12px;overflow:hidden">
+          <div style="background:#1D9E75;padding:8px 11px;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:12px;font-weight:800;color:#fff">B팀</span>
+            <span style="font-size:10px;color:rgba(255,255,255,0.85)">${bScore}점</span>
+          </div>
+          <div style="padding:10px 11px">
+            ${bMembers.length ? renderMembers(bMembers, 'B') : '<div style="font-size:12px;color:#aaa">없음</div>'}
+          </div>
         </div>
       </div>`;
   }
