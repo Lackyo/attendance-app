@@ -354,7 +354,7 @@ def api_member_delete():
 @app.route("/api/team/assign", methods=["POST"])
 def api_team_assign():
     """팀 직접 지정 저장. 해당 월 배정을 통째로 덮어씀 (재편성 가능)
-    body: {year, month, assignments: [{member_id, team}]}  team은 'A'(폭팀) 또는 'B'(헬팀)"""
+    body: {year, month, assignments: [{member_id, team}]}  team은 'A'(A팀) 또는 'B'(B팀)"""
     data = request.json or {}
     now = date.today()
     year = int(data.get("year", now.year))
@@ -471,9 +471,7 @@ def api_team_score():
     team_members = {"A": {}, "B": {}}
 
     for r in rows:
-        d = r["date"]
-        weekday = d.weekday()  # 0=월 ... 6=일
-        point = 2 if weekday >= 4 else 1  # 금(4)~일(6) +2, 나머지 +1
+        point = 1  # 요일 구분 없이 출석 1회당 1점
         team = r["team"]
         name = r["name"]
         team_scores[team] += point
@@ -527,35 +525,61 @@ def api_checkin():
 @app.route("/api/share-text")
 def api_share_text():
     target = request.args.get("date", date.today().isoformat())
+    dt = datetime.strptime(target, "%Y-%m-%d")
+
+    last_day = calendar.monthrange(dt.year, dt.month)[1]
+    m_start = f"{dt.year}-{dt.month:02d}-01"
+    m_end = f"{dt.year}-{dt.month:02d}-{last_day}"
+
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("""
-                SELECT m.name FROM attendance a
-                                       JOIN members m ON a.member_id = m.id
-                WHERE a.date = %s ORDER BY m.name
-                """, (target,))
-    present = cur.fetchall()
 
+    # 이번 달 출석 순위 TOP 3
     cur.execute("""
                 SELECT m.name, COUNT(*) as cnt FROM attendance a
                                                         JOIN members m ON a.member_id = m.id
-                GROUP BY m.id, m.name ORDER BY cnt DESC LIMIT 3
-                """)
+                WHERE a.date >= %s AND a.date <= %s
+                GROUP BY m.id, m.name ORDER BY cnt DESC, m.name LIMIT 3
+                """, (m_start, m_end))
     top = cur.fetchall()
+
+    # 해당 날짜가 속한 달의 팀전 점수 (출석 1회당 1점)
+    cur.execute("""
+                SELECT ta.team, COUNT(*) as pts
+                FROM attendance a
+                         JOIN team_assignments ta
+                              ON ta.member_id = a.member_id AND ta.year = %s AND ta.month = %s
+                WHERE a.date >= %s AND a.date <= %s
+                GROUP BY ta.team
+                """, (dt.year, dt.month, m_start, m_end))
+    team_rows = cur.fetchall()
+
     cur.close()
     release_db(conn)
 
-    dt = datetime.strptime(target, "%Y-%m-%d")
     weekdays = ["월","화","수","목","금","토","일"]
     day_str = f"{dt.month}월 {dt.day}일({weekdays[dt.weekday()]})"
-    names_str = ", ".join([r["name"] for r in present])
     top_str = " | ".join([f"{i+1}위 {r['name']} {r['cnt']}회" for i, r in enumerate(top)])
 
-    text = f"""📋 폭헬방 출석부 — {day_str}
-✅ 출석 {len(present)}명
-{names_str}
+    # 팀전 블록 (편성이 없으면 생략)
+    team_block = ""
+    if team_rows:
+        pts = {r["team"]: r["pts"] for r in team_rows}
+        a_pts, b_pts = pts.get("A", 0), pts.get("B", 0)
+        if a_pts > b_pts:
+            lead = f"A팀 {a_pts - b_pts}점 리드"
+        elif b_pts > a_pts:
+            lead = f"B팀 {b_pts - a_pts}점 리드"
+        else:
+            lead = "🤝 동점"
+        team_block = f"""⚔️ {dt.month}월 팀전
+A팀 {a_pts} : {b_pts} B팀 — {lead}
 
-🏆 누적 순위
+"""
+
+    text = f"""📋 폭헬방 출석부 — {day_str}
+
+{team_block}🏆 {dt.month}월 순위
 {top_str}
 
 🔗 전체 출석부: {os.environ.get('APP_URL', '')}"""

@@ -67,8 +67,8 @@
     .pin-btn { padding: 14px; font-size: 18px; font-weight: 600; background: #f5f4f0; border: none; border-radius: 10px; cursor: pointer; }
     .pin-btn:active { background: #e8e7e3; }
     .tsel { border: 1.5px solid #e8e7e3; background: #fff; color: #999; border-radius: 6px; padding: 4px 9px; font-size: 12px; cursor: pointer; }
-    .tsel.on-pok { background: #FDECEA; border-color: #E24B4A; color: #C0392B; font-weight: 700; }
-    .tsel.on-hell { background: #E1F5EE; border-color: #1D9E75; color: #085041; font-weight: 700; }
+    .tsel.on-a { background: #FDECEA; border-color: #E24B4A; color: #C0392B; font-weight: 700; }
+    .tsel.on-b { background: #E1F5EE; border-color: #1D9E75; color: #085041; font-weight: 700; }
     .tsel.on-none { background: #f1efe8; border-color: #ccc; color: #666; font-weight: 700; }
   </style>
 </head>
@@ -674,13 +674,13 @@
         <div style="font-size:15px;font-weight:700;text-align:center;margin-bottom:16px">⚔️ ${monthLabel} 팀전</div>
         <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">
           <div style="text-align:center;flex:1">
-            <div style="font-size:13px;color:#aaa;margin-bottom:2px">💥 폭팀</div>
+            <div style="font-size:13px;color:#aaa;margin-bottom:2px">A팀</div>
             <div style="font-size:32px;font-weight:800;color:${winner==='A'?'#E24B4A':'#2c2c2a'}">${aScore}</div>
             <div style="font-size:11px;color:#aaa">점</div>
           </div>
           <div style="font-size:20px;color:#ccc;padding:0 8px">VS</div>
           <div style="text-align:center;flex:1">
-            <div style="font-size:13px;color:#aaa;margin-bottom:2px">🔥 헬팀</div>
+            <div style="font-size:13px;color:#aaa;margin-bottom:2px">B팀</div>
             <div style="font-size:32px;font-weight:800;color:${winner==='B'?'#1D9E75':'#2c2c2a'}">${bScore}</div>
             <div style="font-size:11px;color:#aaa">점</div>
           </div>
@@ -689,8 +689,8 @@
           <div style="width:${aWidth}%;background:#E24B4A;border-radius:8px 0 0 8px;transition:width 0.5s"></div>
           <div style="width:${bWidth}%;background:#1D9E75;border-radius:0 8px 8px 0;transition:width 0.5s"></div>
         </div>
-        ${winner ? `<div style="text-align:center;margin-top:10px;font-size:13px;font-weight:600;color:${winner==='A'?'#E24B4A':'#1D9E75'}">🏆 ${winner==='A'?'폭팀':'헬팀'} ${diff}점 ${isCurrentMonth ? '리드!' : '승리!'}</div>` : '<div style="text-align:center;margin-top:10px;font-size:13px;color:#aaa">🤝 동점!</div>'}
-        <div style="font-size:11px;color:#bbb;text-align:center;margin-top:8px">월~목 출석 +1점 · 금~일 출석 +2점</div>
+        ${winner ? `<div style="text-align:center;margin-top:10px;font-size:13px;font-weight:600;color:${winner==='A'?'#E24B4A':'#1D9E75'}">🏆 ${winner==='A'?'A팀':'B팀'} ${diff}점 ${isCurrentMonth ? '리드!' : '승리!'}</div>` : '<div style="text-align:center;margin-top:10px;font-size:13px;color:#aaa">🤝 동점!</div>'}
+        <div style="font-size:11px;color:#bbb;text-align:center;margin-top:8px">출석 1회당 1점</div>
       </div>`;
 
     // 멤버별 점수
@@ -723,17 +723,17 @@
     memberBoard.innerHTML = `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="card" style="padding:12px">
-          <div style="font-size:13px;font-weight:700;color:#E24B4A;margin-bottom:8px">💥 폭팀 <span style="color:#bbb;font-weight:400">${aMembers.length}명</span></div>
+          <div style="font-size:13px;font-weight:700;color:#E24B4A;margin-bottom:8px">A팀 <span style="color:#bbb;font-weight:400">${aMembers.length}명</span></div>
           ${aMembers.length ? renderMembers(aMembers, 'A') : '<div style="font-size:12px;color:#aaa">없음</div>'}
         </div>
         <div class="card" style="padding:12px">
-          <div style="font-size:13px;font-weight:700;color:#1D9E75;margin-bottom:8px">🔥 헬팀 <span style="color:#bbb;font-weight:400">${bMembers.length}명</span></div>
+          <div style="font-size:13px;font-weight:700;color:#1D9E75;margin-bottom:8px">B팀 <span style="color:#bbb;font-weight:400">${bMembers.length}명</span></div>
           ${bMembers.length ? renderMembers(bMembers, 'B') : '<div style="font-size:12px;color:#aaa">없음</div>'}
         </div>
       </div>`;
   }
 
-  // 팀 편성 (관리자) — memberId → 'A'(폭팀) | 'B'(헬팀) | null(미참가)
+  // 팀 편성 (관리자) — memberId → 'A'(A팀) | 'B'(B팀) | null(미참가)
   let teamPick = {};
   let teamPickMembers = [];
   let assignYear = null, assignMonth = null;
@@ -793,8 +793,8 @@
       return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f1efe8">
         <span style="font-size:14px;font-weight:500">${mem.name}</span>
         <span style="display:flex;gap:4px">
-          <button class="tsel ${v==='A'?'on-pok':''}"  onclick="pickTeam(${mem.id},'A')">폭팀</button>
-          <button class="tsel ${v==='B'?'on-hell':''}" onclick="pickTeam(${mem.id},'B')">헬팀</button>
+          <button class="tsel ${v==='A'?'on-a':''}"  onclick="pickTeam(${mem.id},'A')">A팀</button>
+          <button class="tsel ${v==='B'?'on-b':''}" onclick="pickTeam(${mem.id},'B')">B팀</button>
           <button class="tsel ${v===null?'on-none':''}" onclick="pickTeam(${mem.id},null)">미참가</button>
         </span>
       </div>`;
@@ -803,7 +803,7 @@
     const a = Object.values(teamPick).filter(v => v === 'A').length;
     const b = Object.values(teamPick).filter(v => v === 'B').length;
     const n = Object.values(teamPick).filter(v => v === null).length;
-    let msg = `💥 폭팀 ${a}명 · 🔥 헬팀 ${b}명 · 미참가 ${n}명`;
+    let msg = `A팀 ${a}명 · B팀 ${b}명 · 미참가 ${n}명`;
     if (a !== b && (a || b)) msg += `  ⚠️ 인원 불균형`;
     document.getElementById("team-assign-summary").textContent = msg;
   }
@@ -827,7 +827,7 @@
     });
     const d = await res.json();
     if (d.error) return showToast("❌ " + d.error);
-    showToast(`✅ ${assignMonth}월 저장 완료 (폭팀 ${d.pok}명 · 헬팀 ${d.hell}명)`);
+    showToast(`✅ ${assignMonth}월 저장 완료 (A팀 ${d.pok}명 · B팀 ${d.hell}명)`);
     loadTeam();   // 조회 월 목록 + 팀전 화면 갱신
   }
 
