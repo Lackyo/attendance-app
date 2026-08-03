@@ -729,23 +729,15 @@
 
     const renderMembers = (members, team) => {
       const strong = team === 'A' ? '#E24B4A' : '#1D9E75';
-      const mid    = team === 'A' ? '#E8756F' : '#3FB894';
-      const soft   = team === 'A' ? '#F0A9A4' : '#7FD5B8';
-      const topScore = members[0]?.score || 1;
-      return members.map((m, i) => {
-        const w = m.score > 0 ? Math.round(m.score / topScore * 100) : 0;
-        const barColor = i === 0 ? strong : (i < 3 ? mid : soft);
-        return `<div style="display:flex;align-items:center;gap:6px;padding:5px 0">
+      return members.map((m, i) =>
+              `<div style="display:flex;align-items:center;gap:6px;padding:7px 0;${i < members.length-1 ? 'border-bottom:1px solid #f1efe8' : ''}">
             ${i === 0 && m.score > 0
-                ? '<span style="font-size:12px">👑</span>'
-                : `<span style="font-size:10px;color:${m.score===0?'#ddd':'#bbb'};width:12px;text-align:center">${i+1}</span>`}
-            <span style="font-size:13px;flex:1;${m.score===0?'color:#ccc':(i===0?'font-weight:600':'')}">${m.name}</span>
-            <span style="font-size:13px;${m.score===0 ? 'color:#ddd' : `font-weight:700;color:${strong}`}">${m.score}</span>
-          </div>
-          <div style="height:3px;background:#f1efe8;border-radius:2px;margin-bottom:5px">
-            <div style="width:${w}%;height:3px;background:${barColor};border-radius:2px;transition:width 0.4s"></div>
-          </div>`;
-      }).join("");
+                      ? '<span style="font-size:12px">👑</span>'
+                      : `<span style="font-size:10px;color:#bbb;width:12px;text-align:center">${i+1}</span>`}
+            <span style="font-size:13px;flex:1;${i===0 && m.score>0 ? 'font-weight:600' : ''}">${m.name}</span>
+            <span style="font-size:13px;font-weight:700;color:${strong}">${m.score}</span>
+          </div>`
+      ).join("");
     };
 
     memberBoard.innerHTML = `
