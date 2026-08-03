@@ -590,25 +590,16 @@
   let teamMonthIdx = 0;
 
   async function loadTeam() {
-    // 팀 배정이 있는 달 목록 로드
-    const res = await fetch("/api/team/months");
-    teamMonths = await res.json();
+    // 통합 API 1회 호출 (목록 + 편성 + 점수)
+    const res = await fetch("/api/team/all");
+    const d = await res.json();
 
-    const now = new Date();
-    const curY = now.getFullYear(), curM = now.getMonth() + 1;
-
-    // 배정된 달이 없으면 이번 달만 (안내 문구용)
-    if (!teamMonths.length) {
-      teamMonths = [{year: curY, month: curM}];
-      teamMonthIdx = 0;
-    } else {
-      // 기본 선택: 이번 달이 목록에 있으면 그것, 없으면 가장 최근 달
-      const i = teamMonths.findIndex(t => t.year === curY && t.month === curM);
-      teamMonthIdx = i >= 0 ? i : 0;
-    }
+    teamMonths = d.months.length ? d.months : [{year: d.year, month: d.month}];
+    const i = teamMonths.findIndex(t => t.year === d.year && t.month === d.month);
+    teamMonthIdx = i >= 0 ? i : 0;
 
     renderTeamMonthSelect();
-    await renderTeam();
+    paintTeam(d);
   }
 
   function renderTeamMonthSelect() {
@@ -636,13 +627,14 @@
 
   async function renderTeam() {
     const { year, month } = teamMonths[teamMonthIdx];
+    const res = await fetch(`/api/team/all?year=${year}&month=${month}`);
+    paintTeam(await res.json());
+  }
 
-    const [scoreRes, assignRes] = await Promise.all([
-      fetch(`/api/team/score?year=${year}&month=${month}`),
-      fetch(`/api/team/assignments?year=${year}&month=${month}`)
-    ]);
-    const score = await scoreRes.json();
-    const assignments = await assignRes.json();
+  function paintTeam(d) {
+    const year = d.year, month = d.month;
+    const score = {scores: d.scores, members: d.members};
+    const assignments = d.assignments;
 
     const monthLabel = `${year}년 ${month}월`;
     const nowD = new Date();
@@ -689,8 +681,7 @@
           <div style="width:${aWidth}%;background:#E24B4A;border-radius:8px 0 0 8px;transition:width 0.5s"></div>
           <div style="width:${bWidth}%;background:#1D9E75;border-radius:0 8px 8px 0;transition:width 0.5s"></div>
         </div>
-        ${winner ? `<div style="text-align:center;margin-top:10px;font-size:13px;font-weight:600;color:${winner==='A'?'#E24B4A':'#1D9E75'}">🏆 ${winner==='A'?'A팀':'B팀'} ${diff}점 ${isCurrentMonth ? '리드!' : '승리!'}</div>` : '<div style="text-align:center;margin-top:10px;font-size:13px;color:#aaa">🤝 동점!</div>'}
-        <div style="font-size:11px;color:#bbb;text-align:center;margin-top:8px">출석 1회당 1점</div>
+        ${winner ? `<div style="text-align:center;margin-top:12px;background:${winner==='A'?'#FDECEA':'#E1F5EE'};border-radius:8px;padding:8px"><span style="font-size:13px;font-weight:700;color:${winner==='A'?'#C0392B':'#085041'}">🏆 ${winner==='A'?'A팀':'B팀'} ${diff}점 ${isCurrentMonth ? '리드' : '승리'}</span></div>` : '<div style="text-align:center;margin-top:12px;background:#f1efe8;border-radius:8px;padding:8px"><span style="font-size:13px;font-weight:700;color:#888">🤝 동점</span></div>'}
       </div>`;
 
     // 멤버별 점수

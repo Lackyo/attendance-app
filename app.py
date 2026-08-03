@@ -5,17 +5,65 @@ import re
 import calendar
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
+import threading
 from image_gen import generate_attendance_image
 
 app = Flask(__name__)
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+# ── DB 연결 풀 ────────────────────────────────────────────────
+# 요청마다 새로 연결하면 SSL 핸드셰이크 비용(100~300ms)이 매번 발생하므로 풀을 사용
+_pool = None
+_pool_lock = threading.Lock()
+
+def _get_pool():
+    global _pool
+    if _pool is None:
+        with _pool_lock:
+            if _pool is None:
+                _pool = psycopg2.pool.ThreadedConnectionPool(
+                    1, 5, DATABASE_URL, sslmode="require"
+                )
+    return _pool
+
 def get_db():
+    """풀에서 연결을 가져옴. 끊긴 연결이면 버리고 새로 확보."""
+    pool = _get_pool()
+    for _ in range(3):
+        conn = pool.getconn()
+        try:
+            if conn.closed:
+                raise psycopg2.OperationalError("closed connection")
+            # 유휴 중 서버가 끊었는지 확인 (비용이 거의 없는 쿼리)
+            with conn.cursor() as c:
+                c.execute("SELECT 1")
+            conn.rollback()
+            return conn
+        except Exception:
+            try:
+                pool.putconn(conn, close=True)
+            except Exception:
+                pass
+    # 풀이 계속 실패하면 직접 연결로 폴백
     return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 def release_db(conn):
-    conn.close()
+    """연결을 풀에 반납 (닫지 않음)."""
+    if conn is None:
+        return
+    try:
+        conn.rollback()   # 미완료 트랜잭션 정리
+    except Exception:
+        pass
+    try:
+        _get_pool().putconn(conn)
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 def init_db():
     conn = get_db()
@@ -406,6 +454,78 @@ def api_team_clear():
     release_db(conn)
     return jsonify({"ok": True, "year": year, "month": month})
 
+@app.route("/api/team/all")
+def api_team_all():
+    """팀전 화면에 필요한 모든 데이터를 한 번에 반환 (연결 1회, 왕복 1회)
+    - months: 편성이 있는 달 목록 (최신순)
+    - assignments / scores / members: 지정한 달(기본값: 이번 달, 없으면 최신 달) 기준"""
+    now = date.today()
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    # 편성이 있는 달 목록
+    cur.execute("""
+                SELECT DISTINCT year, month FROM team_assignments
+                ORDER BY year DESC, month DESC
+                """)
+    months = [{"year": r["year"], "month": r["month"]} for r in cur.fetchall()]
+
+    # 조회 대상 월 결정
+    req_y, req_m = request.args.get("year"), request.args.get("month")
+    if req_y and req_m:
+        year, month = int(req_y), int(req_m)
+    elif any(t["year"] == now.year and t["month"] == now.month for t in months):
+        year, month = now.year, now.month
+    elif months:
+        year, month = months[0]["year"], months[0]["month"]
+    else:
+        year, month = now.year, now.month
+
+    last_day = calendar.monthrange(year, month)[1]
+    start = f"{year}-{month:02d}-01"
+    end = f"{year}-{month:02d}-{last_day}"
+
+    # 편성 현황
+    cur.execute("""
+                SELECT ta.member_id, m.name, ta.team
+                FROM team_assignments ta
+                         JOIN members m ON ta.member_id = m.id
+                WHERE ta.year = %s AND ta.month = %s
+                ORDER BY ta.team, m.name
+                """, (year, month))
+    assignments = [dict(r) for r in cur.fetchall()]
+
+    # 점수 (출석 1회당 1점) — 전체 행을 받지 않고 DB에서 집계
+    cur.execute("""
+                SELECT m.name, ta.team, COUNT(*) as score
+                FROM attendance a
+                         JOIN members m ON a.member_id = m.id
+                         JOIN team_assignments ta
+                              ON ta.member_id = m.id AND ta.year = %s AND ta.month = %s
+                WHERE a.date >= %s AND a.date <= %s
+                GROUP BY m.name, ta.team
+                ORDER BY score DESC, m.name
+                """, (year, month, start, end))
+    score_rows = cur.fetchall()
+
+    cur.close()
+    release_db(conn)
+
+    scores = {"A": 0, "B": 0}
+    members = {"A": [], "B": []}
+    for r in score_rows:
+        scores[r["team"]] += r["score"]
+        members[r["team"]].append({"name": r["name"], "score": r["score"]})
+
+    return jsonify({
+        "year": year,
+        "month": month,
+        "months": months,
+        "assignments": assignments,
+        "scores": scores,
+        "members": members
+    })
+
 @app.route("/api/team/months")
 def api_team_months():
     """팀 배정이 존재하는 달 목록 (최신순)"""
@@ -443,7 +563,7 @@ def api_team_assignments():
 
 @app.route("/api/team/score")
 def api_team_score():
-    """이번 달 팀별 점수 (월~목 +1, 금~일 +2)"""
+    """이번 달 팀별 점수 (출석 1회당 1점)"""
     now = date.today()
     year = int(request.args.get("year", now.year))
     month = int(request.args.get("month", now.month))
