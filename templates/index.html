@@ -244,6 +244,36 @@
   </div>
 </div>
 
+<!-- 입력 모달 (이름 변경 등) -->
+<div id="input-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:210;align-items:center;justify-content:center;padding:24px">
+  <div style="background:#fff;border-radius:16px;padding:20px;width:100%;max-width:300px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+    <div id="input-modal-title" style="font-size:15px;font-weight:700;margin-bottom:4px"></div>
+    <div id="input-modal-desc" style="font-size:12px;color:#aaa;margin-bottom:14px"></div>
+    <input id="input-modal-field" type="text"
+           style="width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #e8e7e3;border-radius:8px;font-size:15px;margin-bottom:16px">
+    <div style="display:flex;gap:8px">
+      <button onclick="closeInputModal()"
+              style="flex:1;padding:11px;background:#f1efe8;color:#888;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">취소</button>
+      <button onclick="submitInputModal()"
+              style="flex:1;padding:11px;background:#1D9E75;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- 확인 모달 (삭제 등) -->
+<div id="confirm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:210;align-items:center;justify-content:center;padding:24px">
+  <div style="background:#fff;border-radius:16px;padding:20px;width:100%;max-width:300px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+    <div id="confirm-modal-title" style="font-size:15px;font-weight:700;margin-bottom:6px"></div>
+    <div id="confirm-modal-desc" style="font-size:13px;color:#888;line-height:1.5;margin-bottom:18px;white-space:pre-line"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="closeConfirmModal()"
+              style="flex:1;padding:11px;background:#f1efe8;color:#888;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">취소</button>
+      <button id="confirm-modal-ok"
+              style="flex:1;padding:11px;background:#E24B4A;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">삭제</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -272,6 +302,65 @@
     t.classList.add("show");
     setTimeout(() => t.classList.remove("show"), 2500);
   }
+
+  // ── 자체 모달 (브라우저 prompt/confirm 대체) ────────────────
+  let _inputResolve = null;
+  let _confirmResolve = null;
+
+  function askInput(title, desc, defaultValue = "") {
+    return new Promise(resolve => {
+      _inputResolve = resolve;
+      document.getElementById("input-modal-title").textContent = title;
+      document.getElementById("input-modal-desc").textContent = desc || "";
+      const field = document.getElementById("input-modal-field");
+      field.value = defaultValue;
+      document.getElementById("input-modal").style.display = "flex";
+      setTimeout(() => { field.focus(); field.select(); }, 50);
+    });
+  }
+
+  function submitInputModal() {
+    const v = document.getElementById("input-modal-field").value.trim();
+    document.getElementById("input-modal").style.display = "none";
+    if (_inputResolve) { _inputResolve(v || null); _inputResolve = null; }
+  }
+
+  function closeInputModal() {
+    document.getElementById("input-modal").style.display = "none";
+    if (_inputResolve) { _inputResolve(null); _inputResolve = null; }
+  }
+
+  function askConfirm(title, desc, okLabel = "삭제") {
+    return new Promise(resolve => {
+      _confirmResolve = resolve;
+      document.getElementById("confirm-modal-title").textContent = title;
+      document.getElementById("confirm-modal-desc").textContent = desc || "";
+      const ok = document.getElementById("confirm-modal-ok");
+      ok.textContent = okLabel;
+      ok.onclick = () => {
+        document.getElementById("confirm-modal").style.display = "none";
+        if (_confirmResolve) { _confirmResolve(true); _confirmResolve = null; }
+      };
+      document.getElementById("confirm-modal").style.display = "flex";
+    });
+  }
+
+  function closeConfirmModal() {
+    document.getElementById("confirm-modal").style.display = "none";
+    if (_confirmResolve) { _confirmResolve(false); _confirmResolve = null; }
+  }
+
+  // 입력창에서 Enter로 확인, Esc로 취소
+  document.addEventListener("keydown", (e) => {
+    const inputOpen = document.getElementById("input-modal").style.display === "flex";
+    const confirmOpen = document.getElementById("confirm-modal").style.display === "flex";
+    if (e.key === "Enter" && inputOpen) { e.preventDefault(); submitInputModal(); }
+    if (e.key === "Escape") {
+      if (inputOpen) closeInputModal();
+      else if (confirmOpen) closeConfirmModal();
+    }
+  });
+  // ──────────────────────────────────────────────────────────
 
   async function loadToday() {
     const res = await fetch(`/api/today?date=${today}`);
@@ -862,7 +951,9 @@
   }
 
   async function clearTeamAssign() {
-    if (!confirm(`${assignYear}년 ${assignMonth}월 팀 편성을 삭제할까요?\n출석 기록은 그대로 유지됩니다.`)) return;
+    const ok = await askConfirm("팀 편성 삭제",
+            `${assignYear}년 ${assignMonth}월 팀 편성을 삭제할까요?\n출석 기록은 그대로 유지됩니다.`);
+    if (!ok) return;
     const res = await fetch("/api/team/clear", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -976,8 +1067,8 @@
   }
 
   async function mgmtRename(id, oldName) {
-    const newName = prompt(`"${oldName}" → 새 이름`, oldName);
-    if (!newName || newName.trim() === oldName) return;
+    const newName = await askInput("이름 변경", `"${oldName}"의 새 이름을 입력하세요`, oldName);
+    if (!newName || newName === oldName) return;
     const res = await fetch("/api/members/rename", {
       method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({id, name: newName.trim()})
     });
@@ -989,7 +1080,8 @@
   }
 
   async function mgmtDelete(id, name) {
-    if (!confirm(`"${name}" 멤버를 삭제할까요?`)) return;
+    const ok = await askConfirm("멤버 삭제", `"${name}" 멤버를 삭제할까요?\n출석 기록은 남지만 화면에서 보이지 않게 됩니다.`);
+    if (!ok) return;
     const res = await fetch("/api/members/delete", {
       method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({id})
     });
