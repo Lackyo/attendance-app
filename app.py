@@ -146,13 +146,17 @@ def get_all_streaks(cur):
     return streaks
 
 def find_member_id(name, cur):
-    # 1단계 - 정확히 일치
-    cur.execute("SELECT id FROM members WHERE name=%s", (name,))
+    # 1단계 - 정확히 일치 (비활성 멤버는 제외)
+    cur.execute("SELECT id FROM members WHERE name=%s AND active = TRUE", (name,))
     row = cur.fetchone()
     if row:
         return row[0]
-    # 2단계 - alias 매칭
-    cur.execute("SELECT member_id FROM aliases WHERE alias=%s", (name,))
+    # 2단계 - alias 매칭 (비활성 멤버는 제외)
+    cur.execute("""
+                SELECT al.member_id FROM aliases al
+                                             JOIN members m ON al.member_id = m.id
+                WHERE al.alias=%s AND m.active = TRUE
+                """, (name,))
     row = cur.fetchone()
     if row:
         return row[0]
@@ -176,7 +180,7 @@ def api_today():
     cur.execute("""
                 SELECT m.name FROM attendance a
                                        JOIN members m ON a.member_id = m.id
-                WHERE a.date = %s ORDER BY m.name
+                WHERE a.date = %s AND m.active = TRUE ORDER BY m.name
                 """, (target,))
     present = [r["name"] for r in cur.fetchall()]
 
@@ -485,12 +489,12 @@ def api_team_all():
     start = f"{year}-{month:02d}-01"
     end = f"{year}-{month:02d}-{last_day}"
 
-    # 편성 현황
+    # 편성 현황 (비활성 멤버 제외)
     cur.execute("""
                 SELECT ta.member_id, m.name, ta.team
                 FROM team_assignments ta
                          JOIN members m ON ta.member_id = m.id
-                WHERE ta.year = %s AND ta.month = %s
+                WHERE ta.year = %s AND ta.month = %s AND m.active = TRUE
                 ORDER BY ta.team, m.name
                 """, (year, month))
     assignments = [dict(r) for r in cur.fetchall()]
@@ -502,7 +506,7 @@ def api_team_all():
                          JOIN members m ON a.member_id = m.id
                          JOIN team_assignments ta
                               ON ta.member_id = m.id AND ta.year = %s AND ta.month = %s
-                WHERE a.date >= %s AND a.date <= %s
+                WHERE a.date >= %s AND a.date <= %s AND m.active = TRUE
                 GROUP BY m.name, ta.team
                 ORDER BY score DESC, m.name
                 """, (year, month, start, end))
@@ -553,7 +557,7 @@ def api_team_assignments():
                 SELECT ta.member_id, m.name, ta.team
                 FROM team_assignments ta
                          JOIN members m ON ta.member_id = m.id
-                WHERE ta.year = %s AND ta.month = %s
+                WHERE ta.year = %s AND ta.month = %s AND m.active = TRUE
                 ORDER BY ta.team, m.name
                 """, (year, month))
     rows = cur.fetchall()
@@ -580,7 +584,7 @@ def api_team_score():
                 FROM attendance a
                          JOIN members m ON a.member_id = m.id
                          JOIN team_assignments ta ON ta.member_id = m.id AND ta.year = %s AND ta.month = %s
-                WHERE a.date >= %s AND a.date <= %s
+                WHERE a.date >= %s AND a.date <= %s AND m.active = TRUE
                 ORDER BY ta.team, m.name, a.date
                 """, (year, month, start, end))
     rows = cur.fetchall()
@@ -658,7 +662,7 @@ def api_share_text():
     cur.execute("""
                 SELECT m.name, COUNT(*) as cnt FROM attendance a
                                                         JOIN members m ON a.member_id = m.id
-                WHERE a.date >= %s AND a.date <= %s
+                WHERE a.date >= %s AND a.date <= %s AND m.active = TRUE
                 GROUP BY m.id, m.name ORDER BY cnt DESC, m.name LIMIT 3
                 """, (m_start, m_end))
     top = cur.fetchall()
@@ -667,9 +671,10 @@ def api_share_text():
     cur.execute("""
                 SELECT ta.team, COUNT(*) as pts
                 FROM attendance a
+                         JOIN members m ON a.member_id = m.id
                          JOIN team_assignments ta
                               ON ta.member_id = a.member_id AND ta.year = %s AND ta.month = %s
-                WHERE a.date >= %s AND a.date <= %s
+                WHERE a.date >= %s AND a.date <= %s AND m.active = TRUE
                 GROUP BY ta.team
                 """, (dt.year, dt.month, m_start, m_end))
     team_rows = cur.fetchall()
