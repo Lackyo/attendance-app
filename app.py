@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, send_file
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import os
 import re
 import calendar
@@ -7,7 +7,8 @@ import psycopg2
 import psycopg2.extras
 import psycopg2.pool
 import threading
-from image_gen import generate_attendance_image
+from image_gen import generate_attendance_image, generate_team_image
+import io
 
 app = Flask(__name__)
 
@@ -458,11 +459,9 @@ def api_team_clear():
     release_db(conn)
     return jsonify({"ok": True, "year": year, "month": month})
 
-@app.route("/api/team/all")
-def api_team_all():
-    """팀전 화면에 필요한 모든 데이터를 한 번에 반환 (연결 1회, 왕복 1회)
-    - months: 편성이 있는 달 목록 (최신순)
-    - assignments / scores / members: 지정한 달(기본값: 이번 달, 없으면 최신 달) 기준"""
+def fetch_team_data(req_y=None, req_m=None, with_daily=False):
+    """팀전 데이터 조회 (API·이미지 공용). 연결 1회로 목록·편성·점수를 모두 가져옴.
+    with_daily=True 이면 최근 7일 팀별 출석률도 함께 반환 (화면 그래프용)."""
     now = date.today()
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -475,7 +474,6 @@ def api_team_all():
     months = [{"year": r["year"], "month": r["month"]} for r in cur.fetchall()]
 
     # 조회 대상 월 결정
-    req_y, req_m = request.args.get("year"), request.args.get("month")
     if req_y and req_m:
         year, month = int(req_y), int(req_m)
     elif any(t["year"] == now.year and t["month"] == now.month for t in months):
@@ -512,6 +510,46 @@ def api_team_all():
                 """, (year, month, start, end))
     score_rows = cur.fetchall()
 
+    # 최근 7일 팀별 출석률 (화면 그래프용)
+    daily = []
+    if with_daily:
+        # 기준일: 진행 중인 달이면 오늘, 지난달이면 그 달 마지막 날
+        if year == now.year and month == now.month:
+            anchor = now
+        else:
+            anchor = date(year, month, last_day)
+        d_start = anchor - timedelta(days=6)
+        cur.execute("""
+                    SELECT a.date, ta.team, COUNT(*) as cnt
+                    FROM attendance a
+                             JOIN members m ON a.member_id = m.id
+                             JOIN team_assignments ta
+                                  ON ta.member_id = m.id AND ta.year = %s AND ta.month = %s
+                    WHERE a.date >= %s AND a.date <= %s AND m.active = TRUE
+                    GROUP BY a.date, ta.team
+                    """, (year, month, d_start.isoformat(), anchor.isoformat()))
+        day_map = {}
+        for r in cur.fetchall():
+            key = r["date"].isoformat() if hasattr(r["date"], "isoformat") else str(r["date"])
+            day_map.setdefault(key, {})[r["team"]] = r["cnt"]
+
+        size_a = sum(1 for a in assignments if a["team"] == "A")
+        size_b = sum(1 for a in assignments if a["team"] == "B")
+        wd = ["월", "화", "수", "목", "금", "토", "일"]
+        for i in range(7):
+            dd = d_start + timedelta(days=i)
+            key = dd.isoformat()
+            ca = day_map.get(key, {}).get("A", 0)
+            cb = day_map.get(key, {}).get("B", 0)
+            daily.append({
+                "date": key,
+                "day": dd.day,
+                "weekday": wd[dd.weekday()],
+                "a_cnt": ca, "b_cnt": cb,
+                "a_rate": round(ca / size_a * 100) if size_a else 0,
+                "b_rate": round(cb / size_b * 100) if size_b else 0,
+            })
+
     cur.close()
     release_db(conn)
 
@@ -521,14 +559,76 @@ def api_team_all():
         scores[r["team"]] += r["score"]
         members[r["team"]].append({"name": r["name"], "score": r["score"]})
 
-    return jsonify({
+    return {
         "year": year,
         "month": month,
         "months": months,
         "assignments": assignments,
         "scores": scores,
-        "members": members
+        "members": members,
+        "daily": daily
+    }
+
+@app.route("/api/team/all")
+def api_team_all():
+    """팀전 화면에 필요한 모든 데이터를 한 번에 반환"""
+    return jsonify(fetch_team_data(request.args.get("year"), request.args.get("month"),
+                                   with_daily=True))
+
+@app.route("/team-image")
+def team_image():
+    """팀전 화면과 동일한 레이아웃의 PNG 반환 (저장/공유용)"""
+    d = fetch_team_data(request.args.get("year"), request.args.get("month"))
+    year, month = d["year"], d["month"]
+    a_score, b_score = d["scores"]["A"], d["scores"]["B"]
+
+    today = date.today()
+    is_cur = (year == today.year and month == today.month)
+    last_day = calendar.monthrange(year, month)[1]
+
+    if a_score > b_score:
+        winner, verb, diff = "A", ("리드" if is_cur else "승리"), a_score - b_score
+        lead = f"A팀 {diff}점 {verb}"
+    elif b_score > a_score:
+        winner, verb, diff = "B", ("리드" if is_cur else "승리"), b_score - a_score
+        lead = f"B팀 {diff}점 {verb}"
+    else:
+        winner, lead = None, "동점"
+
+    if is_cur:
+        left = last_day - today.day
+        badge = f"{left}일 남음" if left > 0 else "마지막 날"
+    else:
+        badge = "종료"
+
+    weekdays = ["월", "화", "수", "목", "금", "토", "일"]
+    date_label = f"{today.month}월 {today.day}일 ({weekdays[today.weekday()]})"
+
+    # 편성됐지만 출석 0인 멤버도 0점으로 포함 (화면과 동일)
+    def build(team):
+        rows = list(d["members"][team])
+        have = {m["name"] for m in rows}
+        for a in d["assignments"]:
+            if a["team"] == team and a["name"] not in have:
+                rows.append({"name": a["name"], "score": 0})
+        rows.sort(key=lambda x: -x["score"])
+        return rows
+
+    img = generate_team_image({
+        "month_label": f"{year}년 {month}월",
+        "days_badge": badge,
+        "date_label": date_label,
+        "a": a_score, "b": b_score,
+        "winner": winner, "lead": lead,
+        "a_members": build("A"),
+        "b_members": build("B"),
     })
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return send_file(buf, mimetype="image/png", as_attachment=True,
+                     download_name=f"team_{year}-{month:02d}.png")
 
 @app.route("/api/team/months")
 def api_team_months():

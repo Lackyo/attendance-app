@@ -165,7 +165,12 @@
 <!-- 팀전 탭 -->
 <div class="content active" id="tab-team">
   <div id="team-score-board"></div>
+  <div id="team-daily-board"></div>
   <div id="team-member-board"></div>
+  <button onclick="saveTeamImage()" id="team-save-btn"
+          style="width:100%;padding:12px;background:#2c2c2a;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;margin-top:10px">
+    🖼️ 이미지로 저장
+  </button>
 </div>
 
 <div class="content" id="tab-mgmt">
@@ -720,6 +725,37 @@
     paintTeam(await res.json());
   }
 
+  async function saveTeamImage() {
+    const t = teamMonths[teamMonthIdx];
+    if (!t) return showToast("팀전 데이터가 없어요");
+    const url = `/team-image?year=${t.year}&month=${t.month}`;
+    const btn = document.getElementById("team-save-btn");
+    const label = btn.textContent;
+    btn.textContent = "이미지 만드는 중...";
+    btn.disabled = true;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("생성 실패");
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = `팀전_${t.year}-${String(t.month).padStart(2,"0")}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objUrl), 3000);
+      showToast("✅ 이미지가 저장됐어요");
+    } catch (e) {
+      // 다운로드가 막힌 환경(일부 인앱 브라우저)에서는 새 탭으로 열어 길게 눌러 저장
+      window.open(url, "_blank");
+      showToast("이미지를 길게 눌러 저장해주세요");
+    } finally {
+      btn.textContent = label;
+      btn.disabled = false;
+    }
+  }
+
   function paintTeam(d) {
     const year = d.year, month = d.month;
     const score = {scores: d.scores, members: d.members};
@@ -739,6 +775,7 @@
           <div style="font-size:15px;font-weight:700;margin-bottom:8px">⚔️ ${monthLabel} 팀전</div>
           <div style="font-size:13px;color:#aaa;margin-bottom:16px">아직 팀이 배정되지 않았어요<br>관리자 모드에서 팀을 배정해주세요</div>
         </div>`;
+      document.getElementById("team-daily-board").innerHTML = "";
       document.getElementById("team-member-board").innerHTML = "";
       return;
     }
@@ -799,6 +836,48 @@
 
         ${banner}
       </div>`;
+
+    // 최근 7일 팀별 출석률 비교
+    const dailyBoard = document.getElementById("team-daily-board");
+    const daily = d.daily || [];
+    if (!daily.length) {
+      dailyBoard.innerHTML = "";
+    } else {
+      const H = 88;   // 그래프 높이(px)
+      const bars = daily.map((x, i) => {
+        const last = i === daily.length - 1;
+        const zero = x.a_rate === 0 && x.b_rate === 0;
+        const bar = (rate, color) => {
+          const h = rate === 0 ? 3 : Math.max(Math.round(rate / 100 * H), 4);
+          const c = rate === 0 ? "#f1efe8" : color;
+          return `<div style="flex:1;background:${c};height:${h}px;border-radius:3px 3px 0 0;transition:height 0.4s"></div>`;
+        };
+        return `<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end">
+            <div style="display:flex;align-items:flex-end;gap:2px;height:${H}px">
+              ${bar(x.a_rate, "#E24B4A")}${bar(x.b_rate, "#1D9E75")}
+            </div>
+            <div style="text-align:center;font-size:9px;line-height:1.35;margin-top:5px;${last ? 'color:#2c2c2a;font-weight:700' : 'color:#bbb'}">
+              ${x.day}<br>${x.weekday}
+            </div>
+          </div>`;
+      }).join("");
+
+      dailyBoard.innerHTML = `
+        <div class="card" style="padding:14px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <span style="font-size:12px;font-weight:700;color:#888">최근 7일 출석률</span>
+            <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#888;margin-left:auto">
+              <span style="width:8px;height:8px;border-radius:2px;background:#E24B4A"></span>A팀
+            </span>
+            <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#888">
+              <span style="width:8px;height:8px;border-radius:2px;background:#1D9E75"></span>B팀
+            </span>
+          </div>
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:6px">
+            ${bars}
+          </div>
+        </div>`;
+    }
 
     // 멤버별 점수
     const memberBoard = document.getElementById("team-member-board");
