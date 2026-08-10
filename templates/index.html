@@ -728,27 +728,45 @@
   async function saveTeamImage() {
     const t = teamMonths[teamMonthIdx];
     if (!t) return showToast("팀전 데이터가 없어요");
-    const url = `/team-image?year=${t.year}&month=${t.month}`;
+    const base = `/team-image?year=${t.year}&month=${t.month}`;
+    const fname = `팀전_${t.year}-${String(t.month).padStart(2, "0")}.png`;
     const btn = document.getElementById("team-save-btn");
     const label = btn.textContent;
     btn.textContent = "이미지 만드는 중...";
     btn.disabled = true;
+
     try {
-      const res = await fetch(url);
+      const res = await fetch(base);
       if (!res.ok) throw new Error("생성 실패");
       const blob = await res.blob();
+
+      // 1순위: 공유 시트 (모바일에서 저장·카톡 전송 모두 가능)
+      if (navigator.canShare) {
+        const file = new File([blob], fname, { type: "image/png" });
+        if (navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({ files: [file] });
+            return;   // 성공 또는 사용자 취소
+          } catch (err) {
+            if (err && err.name === "AbortError") return;   // 사용자가 닫음
+            // 공유 실패 시 아래 방식으로 계속
+          }
+        }
+      }
+
+      // 2순위: 앵커 다운로드 (PC 브라우저에서 동작)
       const objUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = objUrl;
-      a.download = `팀전_${t.year}-${String(t.month).padStart(2,"0")}.png`;
+      a.download = fname;
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(objUrl), 3000);
-      showToast("✅ 이미지가 저장됐어요");
+      showToast("이미지를 저장했어요");
     } catch (e) {
-      // 다운로드가 막힌 환경(일부 인앱 브라우저)에서는 새 탭으로 열어 길게 눌러 저장
-      window.open(url, "_blank");
+      // 3순위: 이미지를 새 탭에 띄워 길게 눌러 저장 (인앱 브라우저 대응)
+      window.open(base + "&inline=1", "_blank");
       showToast("이미지를 길게 눌러 저장해주세요");
     } finally {
       btn.textContent = label;

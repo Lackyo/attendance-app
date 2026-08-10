@@ -631,6 +631,9 @@ def team_image():
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
+    # inline=1 이면 브라우저에 바로 표시 (길게 눌러 저장용), 아니면 다운로드
+    if request.args.get("inline"):
+        return send_file(buf, mimetype="image/png")
     return send_file(buf, mimetype="image/png", as_attachment=True,
                      download_name=f"team_{year}-{month:02d}.png")
 
