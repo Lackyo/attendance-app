@@ -165,8 +165,8 @@
 <!-- 팀전 탭 -->
 <div class="content active" id="tab-team">
   <div id="team-score-board"></div>
-  <div id="team-daily-board"></div>
   <div id="team-member-board"></div>
+  <div id="team-daily-board"></div>
   <button onclick="saveTeamImage()" id="team-save-btn"
           style="width:100%;padding:12px;background:#2c2c2a;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;margin-top:10px">
     🖼️ 이미지로 저장
@@ -863,9 +863,9 @@
       }).join("");
 
       dailyBoard.innerHTML = `
-        <div class="card" style="padding:14px">
+        <div class="card" style="padding:14px;margin-top:10px">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-            <span style="font-size:12px;font-weight:700;color:#888">최근 7일 출석률</span>
+            <span style="font-size:12px;font-weight:700;color:#888">최근 출석률 <span style="color:#bbb;font-weight:400">(어제까지)</span></span>
             <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#888;margin-left:auto">
               <span style="width:8px;height:8px;border-radius:2px;background:#E24B4A"></span>A팀
             </span>

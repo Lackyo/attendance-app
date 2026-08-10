@@ -510,45 +510,49 @@ def fetch_team_data(req_y=None, req_m=None, with_daily=False):
                 """, (year, month, start, end))
     score_rows = cur.fetchall()
 
-    # 최근 7일 팀별 출석률 (화면 그래프용)
+    # 최근 7일 팀별 출석률 (화면 그래프용) — 오늘은 제외하고 어제까지
     daily = []
     if with_daily:
-        # 기준일: 진행 중인 달이면 오늘, 지난달이면 그 달 마지막 날
+        # 기준일: 진행 중인 달이면 어제, 지난달이면 그 달 마지막 날
         if year == now.year and month == now.month:
-            anchor = now
+            anchor = now - timedelta(days=1)
         else:
             anchor = date(year, month, last_day)
-        d_start = anchor - timedelta(days=6)
-        cur.execute("""
-                    SELECT a.date, ta.team, COUNT(*) as cnt
-                    FROM attendance a
-                             JOIN members m ON a.member_id = m.id
-                             JOIN team_assignments ta
-                                  ON ta.member_id = m.id AND ta.year = %s AND ta.month = %s
-                    WHERE a.date >= %s AND a.date <= %s AND m.active = TRUE
-                    GROUP BY a.date, ta.team
-                    """, (year, month, d_start.isoformat(), anchor.isoformat()))
-        day_map = {}
-        for r in cur.fetchall():
-            key = r["date"].isoformat() if hasattr(r["date"], "isoformat") else str(r["date"])
-            day_map.setdefault(key, {})[r["team"]] = r["cnt"]
+        month_first = date(year, month, 1)
+        # 달을 넘어가서 집계되지 않도록 시작일을 1일로 제한
+        d_start = max(anchor - timedelta(days=6), month_first)
+        if anchor >= month_first:
+            cur.execute("""
+                        SELECT a.date, ta.team, COUNT(*) as cnt
+                        FROM attendance a
+                                 JOIN members m ON a.member_id = m.id
+                                 JOIN team_assignments ta
+                                      ON ta.member_id = m.id AND ta.year = %s AND ta.month = %s
+                        WHERE a.date >= %s AND a.date <= %s AND m.active = TRUE
+                        GROUP BY a.date, ta.team
+                        """, (year, month, d_start.isoformat(), anchor.isoformat()))
+            day_map = {}
+            for r in cur.fetchall():
+                key = r["date"].isoformat() if hasattr(r["date"], "isoformat") else str(r["date"])
+                day_map.setdefault(key, {})[r["team"]] = r["cnt"]
 
-        size_a = sum(1 for a in assignments if a["team"] == "A")
-        size_b = sum(1 for a in assignments if a["team"] == "B")
-        wd = ["월", "화", "수", "목", "금", "토", "일"]
-        for i in range(7):
-            dd = d_start + timedelta(days=i)
-            key = dd.isoformat()
-            ca = day_map.get(key, {}).get("A", 0)
-            cb = day_map.get(key, {}).get("B", 0)
-            daily.append({
-                "date": key,
-                "day": dd.day,
-                "weekday": wd[dd.weekday()],
-                "a_cnt": ca, "b_cnt": cb,
-                "a_rate": round(ca / size_a * 100) if size_a else 0,
-                "b_rate": round(cb / size_b * 100) if size_b else 0,
-            })
+            size_a = sum(1 for a in assignments if a["team"] == "A")
+            size_b = sum(1 for a in assignments if a["team"] == "B")
+            wd = ["월", "화", "수", "목", "금", "토", "일"]
+            span = (anchor - d_start).days + 1
+            for i in range(span):
+                dd = d_start + timedelta(days=i)
+                key = dd.isoformat()
+                ca = day_map.get(key, {}).get("A", 0)
+                cb = day_map.get(key, {}).get("B", 0)
+                daily.append({
+                    "date": key,
+                    "day": dd.day,
+                    "weekday": wd[dd.weekday()],
+                    "a_cnt": ca, "b_cnt": cb,
+                    "a_rate": round(ca / size_a * 100) if size_a else 0,
+                    "b_rate": round(cb / size_b * 100) if size_b else 0,
+                })
 
     cur.close()
     release_db(conn)
