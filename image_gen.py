@@ -2,8 +2,15 @@ from PIL import Image, ImageDraw, ImageFont
 import os
 from datetime import datetime, date
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+
 # 한글 폰트 후보 (앞에서부터 있는 것 사용)
+# 1순위: 저장소에 포함한 폰트 — Render 등 시스템 폰트가 없는 환경 대비
 FONT_CANDIDATES = [
+    (os.path.join(_HERE, "fonts", "NanumGothic.ttf"),
+     os.path.join(_HERE, "fonts", "NanumGothicBold.ttf")),
+    (os.path.join(_HERE, "static", "fonts", "NanumGothic.ttf"),
+     os.path.join(_HERE, "static", "fonts", "NanumGothicBold.ttf")),
     ("/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
      "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf"),
     ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
@@ -14,16 +21,46 @@ FONT_CANDIDATES = [
      "/usr/share/fonts/opentype/noto/NotoSansCJKkr-Bold.otf"),
 ]
 
+def _has_korean_glyph(path):
+    """한글을 실제로 그릴 수 있는 폰트인지 확인.
+    없는 글자는 .notdef(빈 사각형)로 그려지므로, 사용자 영역 문자와
+    렌더 결과가 같으면 한글 미지원으로 판단."""
+    try:
+        f = ImageFont.truetype(path, 40)
+        ko = f.getmask("가")
+        nd = f.getmask("\ue001")   # 존재할 가능성이 거의 없는 문자
+        if ko.getbbox() is None:
+            return False
+        return not (ko.size == nd.size and bytes(ko) == bytes(nd))
+    except Exception:
+        return False
+
+_FONT_CACHE = {}
+
+def _resolve_fonts():
+    """(regular, bold) 경로를 찾아 반환. 한글 렌더 가능한 폰트만 채택."""
+    if "paths" in _FONT_CACHE:
+        return _FONT_CACHE["paths"]
+    found = (None, None)
+    for regular, bold in FONT_CANDIDATES:
+        if os.path.exists(regular) and _has_korean_glyph(regular):
+            found = (regular, bold if os.path.exists(bold) else regular)
+            break
+    if found[0] is None:
+        print("[image_gen] 경고: 한글 폰트를 찾지 못했습니다. "
+              "fonts/NanumGothic.ttf 를 저장소에 추가해주세요.")
+    _FONT_CACHE["paths"] = found
+    return found
+
 def _load_fonts(sub_size, date_size):
     """사용 가능한 한글 폰트를 찾아 반환. 없으면 기본 폰트(한글 미지원)."""
-    for regular, bold in FONT_CANDIDATES:
-        if os.path.exists(regular):
-            bold_path = bold if os.path.exists(bold) else regular
-            try:
-                return (ImageFont.truetype(regular, sub_size),
-                        ImageFont.truetype(bold_path, date_size))
-            except Exception:
-                continue
+    regular, bold = _resolve_fonts()
+    if regular:
+        try:
+            return (ImageFont.truetype(regular, sub_size),
+                    ImageFont.truetype(bold, date_size))
+        except Exception:
+            pass
     return ImageFont.load_default(), ImageFont.load_default()
 
 def generate_attendance_image(target_date=None):
@@ -69,10 +106,7 @@ EMOJI_FONT_PATHS = [
 ]
 
 def _font_paths():
-    for regular, bold in FONT_CANDIDATES:
-        if os.path.exists(regular):
-            return regular, (bold if os.path.exists(bold) else regular)
-    return None, None
+    return _resolve_fonts()
 
 def _f(path, size):
     return ImageFont.truetype(path, size) if path else ImageFont.load_default()
