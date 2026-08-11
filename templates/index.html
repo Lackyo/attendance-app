@@ -70,6 +70,10 @@
     .tsel.on-a { background: #FDECEA; border-color: #E24B4A; color: #C0392B; font-weight: 700; }
     .tsel.on-b { background: #E1F5EE; border-color: #1D9E75; color: #085041; font-weight: 700; }
     .tsel.on-none { background: #f1efe8; border-color: #ccc; color: #666; font-weight: 700; }
+    .chart-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .chart-scroll::-webkit-scrollbar { display: none; }
+    .chart-track { display: flex; align-items: flex-end; gap: 6px; width: max-content; }
+    .chart-col { width: 40px; flex: 0 0 40px; display: flex; flex-direction: column; justify-content: flex-end; }
   </style>
 </head>
 <body>
@@ -279,6 +283,19 @@
   </div>
 </div>
 
+<!-- 이미지 보기 모달 (길게 눌러 저장) -->
+<div id="img-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:220;align-items:center;justify-content:center;flex-direction:column;padding:16px">
+  <div style="color:#fff;font-size:13px;font-weight:600;margin-bottom:10px;text-align:center;line-height:1.5">
+    이미지를 길게 눌러<br><span style="color:#FEE500">‘이미지 저장’</span> 또는 <span style="color:#FEE500">‘공유’</span>를 선택하세요
+  </div>
+  <div style="flex:1;width:100%;overflow:auto;display:flex;align-items:flex-start;justify-content:center">
+    <img id="img-modal-src" alt="팀전 현황"
+         style="max-width:100%;height:auto;border-radius:10px;display:block">
+  </div>
+  <button onclick="closeImgModal()"
+          style="margin-top:12px;padding:11px 28px;background:#fff;color:#2c2c2a;border:none;border-radius:22px;font-size:14px;font-weight:700;cursor:pointer">닫기</button>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -363,6 +380,7 @@
     if (e.key === "Escape") {
       if (inputOpen) closeInputModal();
       else if (confirmOpen) closeConfirmModal();
+      else if (document.getElementById("img-modal").style.display === "flex") closeImgModal();
     }
   });
   // ──────────────────────────────────────────────────────────
@@ -725,6 +743,22 @@
     paintTeam(await res.json());
   }
 
+  // 카카오톡 등 인앱 브라우저 감지
+  function isInAppBrowser() {
+    const ua = navigator.userAgent || "";
+    return /KAKAOTALK|Instagram|FBAN|FBAV|Line|NAVER|DaumApps|everytimeApp/i.test(ua);
+  }
+
+  function closeImgModal() {
+    document.getElementById("img-modal").style.display = "none";
+    document.getElementById("img-modal-src").src = "";
+  }
+
+  function openImgModal(url) {
+    document.getElementById("img-modal-src").src = url;
+    document.getElementById("img-modal").style.display = "flex";
+  }
+
   async function saveTeamImage() {
     const t = teamMonths[teamMonthIdx];
     if (!t) return showToast("팀전 데이터가 없어요");
@@ -732,29 +766,34 @@
     const fname = `팀전_${t.year}-${String(t.month).padStart(2, "0")}.png`;
     const btn = document.getElementById("team-save-btn");
     const label = btn.textContent;
+
+    // 인앱 브라우저는 다운로드·공유 API가 막혀 있어 이미지를 띄워 길게 눌러 저장
+    if (isInAppBrowser()) {
+      openImgModal(base + "&inline=1&t=" + Date.now());
+      return;
+    }
+
     btn.textContent = "이미지 만드는 중...";
     btn.disabled = true;
-
     try {
       const res = await fetch(base);
       if (!res.ok) throw new Error("생성 실패");
       const blob = await res.blob();
 
-      // 1순위: 공유 시트 (모바일에서 저장·카톡 전송 모두 가능)
+      // 공유 시트 (모바일 기본 브라우저)
       if (navigator.canShare) {
         const file = new File([blob], fname, { type: "image/png" });
         if (navigator.canShare({ files: [file] })) {
           try {
             await navigator.share({ files: [file] });
-            return;   // 성공 또는 사용자 취소
+            return;
           } catch (err) {
-            if (err && err.name === "AbortError") return;   // 사용자가 닫음
-            // 공유 실패 시 아래 방식으로 계속
+            if (err && err.name === "AbortError") return;
           }
         }
       }
 
-      // 2순위: 앵커 다운로드 (PC 브라우저에서 동작)
+      // 앵커 다운로드 (PC)
       const objUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = objUrl;
@@ -765,9 +804,7 @@
       setTimeout(() => URL.revokeObjectURL(objUrl), 3000);
       showToast("이미지를 저장했어요");
     } catch (e) {
-      // 3순위: 이미지를 새 탭에 띄워 길게 눌러 저장 (인앱 브라우저 대응)
-      window.open(base + "&inline=1", "_blank");
-      showToast("이미지를 길게 눌러 저장해주세요");
+      openImgModal(base + "&inline=1&t=" + Date.now());
     } finally {
       btn.textContent = label;
       btn.disabled = false;
@@ -855,26 +892,30 @@
         ${banner}
       </div>`;
 
-    // 최근 7일 팀별 출석률 비교
+    // 일별 팀 출석률 비교 (이번 달 전체, 가로 스크롤)
     const dailyBoard = document.getElementById("team-daily-board");
     const daily = d.daily || [];
     if (!daily.length) {
       dailyBoard.innerHTML = "";
     } else {
       const H = 88;   // 그래프 높이(px)
-      const bars = daily.map((x, i) => {
-        const last = i === daily.length - 1;
-        const zero = x.a_rate === 0 && x.b_rate === 0;
+      const PITCH = 46;  // 막대 그룹 폭 40 + 간격 6
+      // 전역 today 는 '어제' 날짜 (출석 기준일) — 이 날짜를 기본 오른쪽 끝에 맞춤
+      let refIdx = daily.findIndex(x => x.date === today);
+      if (refIdx < 0) refIdx = daily.length - 1;
+
+      const cols = daily.map((x, i) => {
+        const isRef = i === refIdx;
         const bar = (rate, color) => {
           const h = rate === 0 ? 3 : Math.max(Math.round(rate / 100 * H), 4);
           const c = rate === 0 ? "#f1efe8" : color;
-          return `<div style="flex:1;background:${c};height:${h}px;border-radius:3px 3px 0 0;transition:height 0.4s"></div>`;
+          return `<div style="flex:1;background:${c};height:${h}px;border-radius:3px 3px 0 0"></div>`;
         };
-        return `<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end">
+        return `<div class="chart-col">
             <div style="display:flex;align-items:flex-end;gap:2px;height:${H}px">
               ${bar(x.a_rate, "#E24B4A")}${bar(x.b_rate, "#1D9E75")}
             </div>
-            <div style="text-align:center;font-size:9px;line-height:1.35;margin-top:5px;${last ? 'color:#2c2c2a;font-weight:700' : 'color:#bbb'}">
+            <div style="text-align:center;font-size:9px;line-height:1.35;margin-top:5px;${isRef ? 'color:#2c2c2a;font-weight:700' : 'color:#bbb'}">
               ${x.day}<br>${x.weekday}
             </div>
           </div>`;
@@ -882,8 +923,9 @@
 
       dailyBoard.innerHTML = `
         <div class="card" style="padding:14px;margin-top:10px">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-            <span style="font-size:12px;font-weight:700;color:#888">최근 출석률 <span style="color:#bbb;font-weight:400">(어제까지)</span></span>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <span style="font-size:12px;font-weight:700;color:#888">일별 출석률</span>
+            <span style="font-size:10px;color:#ccc">좌우로 밀기</span>
             <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#888;margin-left:auto">
               <span style="width:8px;height:8px;border-radius:2px;background:#E24B4A"></span>A팀
             </span>
@@ -891,10 +933,18 @@
               <span style="width:8px;height:8px;border-radius:2px;background:#1D9E75"></span>B팀
             </span>
           </div>
-          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:6px">
-            ${bars}
+          <div class="chart-scroll" id="chart-scroll">
+            <div class="chart-track">${cols}</div>
           </div>
         </div>`;
+
+      // 기준일(어제)이 오른쪽 끝에 오도록 스크롤 — 더 밀면 오늘까지 보임
+      const sc = document.getElementById("chart-scroll");
+      if (sc) requestAnimationFrame(() => {
+        const target = refIdx * PITCH + 40 - sc.clientWidth;
+        const max = sc.scrollWidth - sc.clientWidth;
+        sc.scrollLeft = Math.max(0, Math.min(target, max));
+      });
     }
 
     // 멤버별 점수

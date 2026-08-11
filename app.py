@@ -510,17 +510,17 @@ def fetch_team_data(req_y=None, req_m=None, with_daily=False):
                 """, (year, month, start, end))
     score_rows = cur.fetchall()
 
-    # 최근 7일 팀별 출석률 (화면 그래프용) — 오늘은 제외하고 어제까지
+    # 일별 팀 출석률 (화면 그래프용) — 이번 달 1일부터 오늘까지
+    # (기본 화면은 어제까지 보이고, 오른쪽으로 밀면 오늘도 확인 가능)
     daily = []
-    if with_daily:
-        # 기준일: 진행 중인 달이면 어제, 지난달이면 그 달 마지막 날
+    if with_daily and assignments:
+        # 기준일: 진행 중인 달이면 오늘, 지난달이면 그 달 마지막 날
         if year == now.year and month == now.month:
-            anchor = now - timedelta(days=1)
+            anchor = now
         else:
             anchor = date(year, month, last_day)
         month_first = date(year, month, 1)
-        # 달을 넘어가서 집계되지 않도록 시작일을 1일로 제한
-        d_start = max(anchor - timedelta(days=6), month_first)
+        d_start = month_first
         if anchor >= month_first:
             cur.execute("""
                         SELECT a.date, ta.team, COUNT(*) as cnt
