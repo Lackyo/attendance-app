@@ -7,7 +7,7 @@ import psycopg2
 import psycopg2.extras
 import psycopg2.pool
 import threading
-from image_gen import generate_attendance_image, generate_team_image
+from image_gen import generate_attendance_image, generate_team_image, generate_og_image
 import io
 
 app = Flask(__name__)
@@ -163,10 +163,16 @@ def find_member_id(name, cur):
         return row[0]
     return None
 
+# OG 이미지 디자인이 바뀌면 이 값을 올려서 카카오톡 캐시를 무효화
+OG_VERSION = "3"
+
 @app.route("/")
 def index():
     today = date.today().isoformat()
-    return render_template("index.html", today=today)
+    # 절대 URL + 날짜/버전 파라미터 → 카카오톡이 매일 새 이미지로 인식
+    base = (os.environ.get("APP_URL", "") or "").rstrip("/")
+    og_image = f"{base}/og-image?date={today}&v={OG_VERSION}"
+    return render_template("index.html", today=today, og_image=og_image, app_url=base)
 
 # UptimeRobot ping 엔드포인트 (슬립 방지)
 @app.route("/ping")
@@ -817,18 +823,58 @@ A팀 {a_pts} : {b_pts} B팀 — {lead}
 🔗 전체 출석부: {os.environ.get('APP_URL', '')}"""
     return jsonify({"text": text})
 
+def _png_response(img, no_store=True):
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    resp = send_file(buf, mimetype="image/png")
+    if no_store:
+        # 카카오톡·브라우저가 오래된 이미지를 재사용하지 않도록
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+    return resp
+
 @app.route("/og-image")
 def og_image():
+    """카카오톡 링크 미리보기 이미지 (날짜 + 이번 달 순위 TOP3).
+    파일로 저장하지 않고 매번 새로 그려 오래된 이미지가 남지 않게 함."""
     target = request.args.get("date", date.today().isoformat())
-    path = f"static/og_{target}.png"
-    if not os.path.exists(path):
-        try:
-            generate_attendance_image(target)
-        except:
-            pass
-    if os.path.exists(path):
-        return send_file(path, mimetype="image/png")
-    return "", 404
+    try:
+        dt = datetime.strptime(target, "%Y-%m-%d")
+    except ValueError:
+        dt = datetime.combine(date.today(), datetime.min.time())
+
+    last_day = calendar.monthrange(dt.year, dt.month)[1]
+    m_start = f"{dt.year}-{dt.month:02d}-01"
+    m_end = f"{dt.year}-{dt.month:02d}-{last_day}"
+
+    top = []
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+                    SELECT m.name, COUNT(*) as cnt FROM attendance a
+                                                            JOIN members m ON a.member_id = m.id
+                    WHERE a.date >= %s AND a.date <= %s AND m.active = TRUE
+                    GROUP BY m.id, m.name ORDER BY cnt DESC, m.name LIMIT 3
+                    """, (m_start, m_end))
+        top = [{"name": r["name"], "cnt": r["cnt"]} for r in cur.fetchall()]
+        cur.close()
+        release_db(conn)
+    except Exception:
+        pass
+
+    weekdays = ["월", "화", "수", "목", "금", "토", "일"]
+    try:
+        img = generate_og_image({
+            "date_label": f"{dt.month}월 {dt.day}일 ({weekdays[dt.weekday()]})",
+            "month_label": f"{dt.month}월",
+            "top": top,
+        })
+        return _png_response(img)
+    except Exception:
+        return "", 404
 
 if __name__ == "__main__":
     init_db()

@@ -63,7 +63,8 @@ def _load_fonts(sub_size, date_size):
             pass
     return ImageFont.load_default(), ImageFont.load_default()
 
-def generate_attendance_image(target_date=None):
+def generate_attendance_image(target_date=None, save=True):
+    """save=False 이면 파일로 저장하지 않고 PIL Image 를 반환."""
     if target_date is None:
         target_date = date.today().isoformat()
 
@@ -94,6 +95,8 @@ def generate_attendance_image(target_date=None):
     draw.text(((W - (db[2] - db[0])) // 2 - db[0], top + (tb[3] - tb[1]) + gap - db[1]),
               date_str, fill=DARK, font=font_date)
 
+    if not save:
+        return img
     os.makedirs("static", exist_ok=True)
     path = f"static/og_{target_date}.png"
     img.save(path)
@@ -332,5 +335,206 @@ def generate_team_image(data):
             if i < len(mem) - 1:
                 cd.line([(0, y + ROW_H), (cw, y + ROW_H)], fill=LINE)
         img.paste(card, (PAD + idx * (cw + gap_c), top), _round_mask((cw, COL_H), 12 * S))
+
+    return img
+
+
+def generate_team_og_image(data):
+    """카카오톡 링크 미리보기용 팀전 이미지 (800x420, 약 2:1).
+    점수판만 담아 썸네일에서 잘리지 않게 구성.
+    data = {month_label, days_badge, a, b, winner, lead}"""
+    W, H = 800, 420
+    BG = (245, 244, 240); WHITE = (255, 255, 255)
+    DARK = (44, 44, 42); YELLOW = (254, 229, 0)
+    RED = (226, 75, 74); GREEN = (29, 158, 117)
+    RED_D = (179, 46, 45); RED_L = (244, 147, 139)
+    GRN_L = (127, 213, 184); GRN_D = (11, 95, 73)
+    LINE = (241, 239, 232)
+
+    A, B = data["a"], data["b"]
+    REG, BOLD = _font_paths()
+    ef = _emoji_font()
+    f_hdr   = _f(BOLD, 30)
+    f_title = _f(BOLD, 27)
+    f_badge = _f(BOLD, 19)
+    f_team  = _f(BOLD, 24)
+    f_score = _f(BOLD, 72)
+    f_vs    = _f(BOLD, 21)
+    f_pct   = _f(BOLD, 19)
+    f_lead  = _f(BOLD, 27)
+
+    img = Image.new("RGB", (W, H), BG)
+    d = ImageDraw.Draw(img)
+
+    def tw(txt, font):
+        bb = d.textbbox((0, 0), txt, font=font)
+        return bb[2] - bb[0], bb
+
+    # 노란 헤더
+    HDR = 58
+    d.rectangle([0, 0, W, HDR], fill=YELLOW)
+    hx = 28
+    d.text((hx, HDR // 2 - 20), "폭헬방 출석부", font=f_hdr, fill=DARK)
+    hx += tw("폭헬방 출석부", f_hdr)[0] + 10
+    _paste_emoji(img, "🏋️", (hx, HDR // 2 - 16), 30, ef)
+
+    # 카드
+    cy0, cy1 = HDR + 22, H - 22
+    d.rounded_rectangle([24, cy0, W - 24, cy1], radius=22, fill=WHITE)
+
+    # 타이틀 행
+    title = data["month_label"] + " 팀전"
+    badge = data.get("days_badge", "")
+    tw_t, _ = tw(title, f_title)
+    em_w = 26 if ef else 0
+    bw_pill = 0
+    if badge:
+        bw, _ = tw(badge, f_badge)
+        bw_pill = bw + 26
+    total_w = em_w + (10 if em_w else 0) + tw_t + (14 + bw_pill if badge else 0)
+    tx, ty = (W - total_w) // 2, cy0 + 26
+    if em_w:
+        _paste_emoji(img, "⚔️", (tx, ty), 25, ef)
+        tx += em_w + 10
+    d.text((tx, ty - f_title.getbbox(title)[1]), title, font=f_title, fill=DARK)
+    tx += tw_t
+    if badge:
+        tx += 14
+        ph = 30
+        d.rounded_rectangle([tx, ty - 3, tx + bw_pill, ty - 3 + ph], radius=ph // 2, fill=LINE)
+        bb2 = f_badge.getbbox(badge)
+        d.text((tx + 13, ty - 3 + (ph - (bb2[3] - bb2[1])) // 2 - bb2[1]),
+               badge, font=f_badge, fill=(136, 136, 136))
+
+    # 점수
+    sy = cy0 + 72
+    for label, val, cx, col in [("A팀", str(A), W // 4 + 10, RED),
+                                ("B팀", str(B), W * 3 // 4 - 10, GREEN)]:
+        lw, lb = tw(label, f_team)
+        d.text((cx - lw // 2 - lb[0], sy - lb[1]), label, font=f_team, fill=col)
+        vw, vb = tw(val, f_score)
+        d.text((cx - vw // 2 - vb[0], sy + 30 - vb[1]), val, font=f_score, fill=col)
+
+    # VS
+    vsw, vsb = tw("VS", f_vs)
+    pw, ph = vsw + 34, 34
+    px, py = W // 2 - pw // 2, sy + 50
+    d.rounded_rectangle([px, py, px + pw, py + ph], radius=ph // 2, fill=DARK)
+    d.text((px + 17 - vsb[0], py + (ph - (vsb[3] - vsb[1])) // 2 - vsb[1]),
+           "VS", font=f_vs, fill=WHITE)
+
+    # 게이지
+    gx0, gx1, gh = 54, W - 54, 32
+    gy0 = cy0 + 186
+    if A + B == 0:
+        d.rounded_rectangle([gx0, gy0, gx1, gy0 + gh], radius=gh // 2, fill=(233, 231, 224))
+    else:
+        total = A + B
+        split = gx0 + int((gx1 - gx0) * A / total)
+        bar = Image.new("RGB", (gx1 - gx0, gh), LINE)
+        bd = ImageDraw.Draw(bar)
+        if split > gx0:
+            _hgrad(bd, (0, 0, split - gx0, gh), RED_D, RED_L)
+        if split < gx1:
+            _hgrad(bd, (split - gx0, 0, gx1 - gx0, gh), GRN_L, GRN_D)
+        img.paste(bar, (gx0, gy0), _round_mask((gx1 - gx0, gh), gh // 2))
+        aP = round(A / total * 100); bP = 100 - aP
+        if aP >= 18:
+            pb = f_pct.getbbox(f"{aP}%")
+            d.text((gx0 + 14, gy0 + (gh - (pb[3] - pb[1])) // 2 - pb[1]),
+                   f"{aP}%", font=f_pct, fill=WHITE)
+        if bP >= 18:
+            t2 = f"{bP}%"; w2, pb2 = tw(t2, f_pct)
+            d.text((gx1 - 14 - w2, gy0 + (gh - (pb2[3] - pb2[1])) // 2 - pb2[1]),
+                   t2, font=f_pct, fill=WHITE)
+
+    # 리드 배너
+    win = data.get("winner")
+    bg_c = (253, 236, 234) if win == "A" else ((225, 245, 238) if win == "B" else LINE)
+    fg_c = (192, 57, 43) if win == "A" else ((8, 80, 65) if win == "B" else (136, 136, 136))
+    by0, bh2 = cy0 + 236, 46
+    d.rounded_rectangle([gx0, by0, gx1, by0 + bh2], radius=14, fill=bg_c)
+    lead = data["lead"]
+    em2 = 26 if (ef and win) else 0
+    lw2, lb2 = tw(lead, f_lead)
+    sx = (W - (em2 + (8 if em2 else 0) + lw2)) // 2
+    if em2:
+        _paste_emoji(img, "🏆", (sx, by0 + (bh2 - em2) // 2), em2, ef)
+        sx += em2 + 8
+    d.text((sx - lb2[0], by0 + (bh2 - (lb2[3] - lb2[1])) // 2 - lb2[1]),
+           lead, font=f_lead, fill=fg_c)
+
+    return img
+
+
+def generate_og_image(data):
+    """카카오톡 링크 미리보기용 기본 이미지 (800x420).
+    날짜 + 이번 달 순위 TOP3. 팀전 여부와 무관하게 항상 동일한 구성.
+    data = {date_label, month_label, top: [{name, cnt}, ...]}"""
+    W, H = 800, 420
+    BG = (245, 244, 240); WHITE = (255, 255, 255)
+    DARK = (44, 44, 42); GRAY = (150, 148, 141); LIGHT = (196, 194, 186)
+    YELLOW = (254, 229, 0); LINE = (238, 236, 228)
+    GOLD = (198, 148, 20); SILVER = (138, 138, 138); BRONZE = (166, 106, 50)
+
+    REG, BOLD = _font_paths()
+    ef = _emoji_font()
+    f_hdr   = _f(BOLD, 30)
+    f_date  = _f(BOLD, 56)
+    f_label = _f(REG, 21)
+    f_name  = _f(BOLD, 27)
+    f_cnt   = _f(REG, 21)
+    f_rank  = _f(BOLD, 22)
+
+    img = Image.new("RGB", (W, H), BG)
+    d = ImageDraw.Draw(img)
+
+    def tw(txt, font):
+        bb = d.textbbox((0, 0), txt, font=font)
+        return bb[2] - bb[0], bb
+
+    def ctext(cx, y, txt, font, fill):
+        w, bb = tw(txt, font)
+        d.text((cx - w // 2 - bb[0], y - bb[1]), txt, font=font, fill=fill)
+
+    # 노란 헤더
+    HDR = 58
+    d.rectangle([0, 0, W, HDR], fill=YELLOW)
+    hx = 28
+    d.text((hx, HDR // 2 - 20), "폭헬방 출석부", font=f_hdr, fill=DARK)
+    hx += tw("폭헬방 출석부", f_hdr)[0] + 10
+    _paste_emoji(img, "🏋️", (hx, HDR // 2 - 16), 30, ef)
+
+    # 카드
+    cy0, cy1 = HDR + 22, H - 22
+    d.rounded_rectangle([24, cy0, W - 24, cy1], radius=22, fill=WHITE)
+
+    # 날짜
+    ctext(W // 2, cy0 + 34, data["date_label"], f_date, DARK)
+
+    top = data.get("top") or []
+    if not top:
+        ctext(W // 2, cy0 + 132, "아직 출석 기록이 없어요", f_label, LIGHT)
+        return img
+
+    # 구분선 + 순위 라벨
+    d.line([(64, cy0 + 116), (W - 64, cy0 + 116)], fill=LINE, width=2)
+    ctext(W // 2, cy0 + 134, f"{data['month_label']} 순위", f_label, GRAY)
+
+    # TOP3 3단
+    medals = ["🥇", "🥈", "🥉"]
+    fallback = ["1", "2", "3"]
+    colors = [GOLD, SILVER, BRONZE]
+    n = min(len(top), 3)
+    slot = (W - 120) // 3
+    base_x = 60 + slot // 2
+    for i in range(n):
+        cx = base_x + i * slot
+        y = cy0 + 178
+        placed = _paste_emoji(img, medals[i], (cx - 19, y), 38, ef)
+        if not placed:
+            ctext(cx, y + 8, fallback[i], f_rank, colors[i])
+        ctext(cx, y + 52, top[i]["name"], f_name, DARK)
+        ctext(cx, y + 90, f"{top[i]['cnt']}회", f_cnt, colors[i])
 
     return img
