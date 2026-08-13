@@ -153,10 +153,34 @@ def _round_mask(size, radius):
                                         radius=radius, fill=255)
     return m
 
+def _draw_medal_badge(img, cx, cy, r, rank, font):
+    """금·은·동 원형 배지를 직접 그림 (이모지 폰트 없이도 항상 동작). rank: 1,2,3"""
+    fills = {1: (240, 201, 62), 2: (206, 206, 206), 3: (216, 149, 82)}
+    rings = {1: (186, 138, 20), 2: (150, 150, 150), 3: (159, 100, 42)}
+    fill = fills.get(rank, (200, 200, 200))
+    ring = rings.get(rank, (150, 150, 150))
+
+    # 계단 현상 방지: 4배로 그린 뒤 축소
+    SS = 4
+    size = r * 2 * SS
+    layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+    ld.ellipse([0, 0, size - 1, size - 1], fill=ring)
+    inset = 3 * SS
+    ld.ellipse([inset, inset, size - 1 - inset, size - 1 - inset], fill=fill)
+    layer = layer.resize((r * 2, r * 2), Image.LANCZOS)
+    img.paste(layer, (cx - r, cy - r), layer)
+
+    d = ImageDraw.Draw(img)
+    txt = str(rank)
+    bb = d.textbbox((0, 0), txt, font=font)
+    d.text((cx - (bb[2] - bb[0]) // 2 - bb[0], cy - (bb[3] - bb[1]) // 2 - bb[1]),
+           txt, font=font, fill=(255, 255, 255))
+
 def generate_team_image(data):
     """팀전 화면과 동일한 레이아웃의 이미지를 PIL Image 로 반환.
     data = {month_label, days_badge, date_label, a, b, winner, lead,
-            a_members, b_members}"""
+            a_members, b_members, daily(optional)}"""
     S = 2                      # 화면(390px) → 이미지(780px) 스케일
     W = 800
     PAD = 28                   # 화면 14px
@@ -193,7 +217,13 @@ def generate_team_image(data):
     CARD_H = 200 * S
     ROW_H  = 32 * S
     COL_H  = 20 * S + rows * ROW_H + 5 * S
-    H = HDR_H + PAD + CARD_H + 10 * S + COL_H + PAD
+
+    daily = data.get("daily") or []
+    # 일수가 많으면 2줄로 나눠 막대를 넓게 (가독성)
+    chart_rows = 2 if len(daily) > 16 else 1
+    ROW_BLOCK = 88 * S + 22 * S
+    CHART_H = (14 * S + 18 * S + ROW_BLOCK * chart_rows + 10 * S) if daily else 0
+    H = HDR_H + PAD + CARD_H + 10 * S + COL_H + (10 * S + CHART_H if daily else 0) + PAD
 
     img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
@@ -320,12 +350,12 @@ def generate_team_image(data):
         for i, m in enumerate(mem):
             y = 20 * S + i * ROW_H
             mid = y + ROW_H // 2
-            # 순위 또는 왕관
-            if i == 0 and m["score"] > 0 and ef:
-                _paste_emoji(card, "👑", (10 * S, mid - 7 * S), 13 * S, ef)
+            # 순위: 1~3위는 금·은·동 배지, 4위 이후는 숫자
+            if i < 3 and m["score"] > 0:
+                _draw_medal_badge(card, 16 * S, mid, 7 * S, i + 1, f_rank)
             else:
                 rb = cd.textbbox((0, 0), str(i + 1), font=f_rank)
-                cd.text((12 * S - (rb[2] - rb[0]) // 2 + 4 * S, mid - (rb[3] - rb[1]) // 2 - rb[1]),
+                cd.text((16 * S - (rb[2] - rb[0]) // 2, mid - (rb[3] - rb[1]) // 2 - rb[1]),
                         str(i + 1), font=f_rank, fill=(187, 187, 187))
             nb = cd.textbbox((0, 0), m["name"], font=f_name)
             cd.text((30 * S, mid - (nb[3] - nb[1]) // 2 - nb[1]), m["name"], font=f_name, fill=DARK)
@@ -335,6 +365,73 @@ def generate_team_image(data):
             if i < len(mem) - 1:
                 cd.line([(0, y + ROW_H), (cw, y + ROW_H)], fill=LINE)
         img.paste(card, (PAD + idx * (cw + gap_c), top), _round_mask((cw, COL_H), 12 * S))
+
+    # ── 일별 출석률 그래프 ──
+    if daily:
+        ch_top = top + COL_H + 10 * S
+        chart = Image.new("RGB", (W - PAD * 2, CHART_H), WHITE)
+        chd = ImageDraw.Draw(chart)
+        inner_w = W - PAD * 2
+
+        f_ct = _f(BOLD, 12 * S)
+        f_cl = _f(REG, 10 * S)
+
+        # 타이틀 + 범례
+        pad_x = 14 * S
+        ty2 = 14 * S
+        ct_title = "최근 출석률"
+        tb2 = f_ct.getbbox(ct_title)
+        chd.text((pad_x, ty2 - tb2[1]), ct_title, font=f_ct, fill=(136, 136, 136))
+        lx = inner_w - pad_x
+        for lbl, col in [("B팀", GREEN), ("A팀", RED)]:
+            lb4 = chd.textbbox((0, 0), lbl, font=f_cl)
+            lw4 = lb4[2] - lb4[0]
+            lx -= lw4
+            chd.text((lx, ty2 + 1 * S - lb4[1]), lbl, font=f_cl, fill=(136, 136, 136))
+            lx -= 5 * S + 8 * S
+            chd.rounded_rectangle([lx, ty2 + 2 * S, lx + 8 * S, ty2 + 10 * S],
+                                  radius=2 * S, fill=col)
+            lx -= 10 * S
+
+        # 막대: 일수가 많으면 두 줄로 나눠 배치
+        GH = 88 * S
+        avail = inner_w - pad_x * 2
+        n = len(daily)
+        per_row = (n + chart_rows - 1) // chart_rows
+        show_wd = per_row <= 16
+
+        for r in range(chart_rows):
+            seg = daily[r * per_row:(r + 1) * per_row]
+            if not seg:
+                continue
+            gy_top = 14 * S + 18 * S + 6 * S + r * ROW_BLOCK
+            pitch = avail / per_row
+            bw = max(3, int(pitch * 0.40))
+            for j, x in enumerate(seg):
+                i = r * per_row + j
+                gx = pad_x + pitch * j + (pitch - bw * 2 - 2) / 2
+                for rate, col in [(x["a_rate"], RED), (x["b_rate"], GREEN)]:
+                    h = 3 if rate == 0 else max(int(rate / 100 * GH), 4)
+                    c = LINE if rate == 0 else col
+                    x0 = int(gx)
+                    chd.rounded_rectangle([x0, gy_top + GH - h, x0 + bw, gy_top + GH],
+                                          radius=min(3, bw // 2), fill=c)
+                    gx += bw + 2
+                # 날짜 라벨
+                is_ref = (i == n - 1)
+                step = 1 if per_row <= 16 else 2
+                if is_ref or j % step == 0:
+                    lab = str(x["day"])
+                    lb5 = chd.textbbox((0, 0), lab, font=f_cl)
+                    cxx = pad_x + pitch * j + pitch / 2
+                    chd.text((cxx - (lb5[2] - lb5[0]) / 2, gy_top + GH + 6 * S - lb5[1]),
+                             lab, font=f_cl, fill=DARK if is_ref else (187, 187, 187))
+                    if show_wd:
+                        lb6 = chd.textbbox((0, 0), x["weekday"], font=f_cl)
+                        chd.text((cxx - (lb6[2] - lb6[0]) / 2, gy_top + GH + 18 * S - lb6[1]),
+                                 x["weekday"], font=f_cl, fill=(200, 198, 190))
+
+        img.paste(chart, (PAD, ch_top), _round_mask((inner_w, CHART_H), 12 * S))
 
     return img
 
@@ -521,20 +618,15 @@ def generate_og_image(data):
     d.line([(64, cy0 + 116), (W - 64, cy0 + 116)], fill=LINE, width=2)
     ctext(W // 2, cy0 + 134, f"{data['month_label']} 순위", f_label, GRAY)
 
-    # TOP3 3단
-    medals = ["🥇", "🥈", "🥉"]
-    fallback = ["1", "2", "3"]
+    # TOP3 3단 — 금·은·동 배지를 직접 그려 폰트 의존 없이 표시
     colors = [GOLD, SILVER, BRONZE]
     n = min(len(top), 3)
     slot = (W - 120) // 3
     base_x = 60 + slot // 2
     for i in range(n):
         cx = base_x + i * slot
-        y = cy0 + 178
-        placed = _paste_emoji(img, medals[i], (cx - 19, y), 38, ef)
-        if not placed:
-            ctext(cx, y + 8, fallback[i], f_rank, colors[i])
-        ctext(cx, y + 52, top[i]["name"], f_name, DARK)
-        ctext(cx, y + 90, f"{top[i]['cnt']}회", f_cnt, colors[i])
+        _draw_medal_badge(img, cx, cy0 + 190, 21, i + 1, f_rank)
+        ctext(cx, cy0 + 230, top[i]["name"], f_name, DARK)
+        ctext(cx, cy0 + 268, f"{top[i]['cnt']}회", f_cnt, colors[i])
 
     return img

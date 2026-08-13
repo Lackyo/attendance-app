@@ -588,7 +588,8 @@ def api_team_all():
 @app.route("/team-image")
 def team_image():
     """팀전 화면과 동일한 레이아웃의 PNG 반환 (저장/공유용)"""
-    d = fetch_team_data(request.args.get("year"), request.args.get("month"))
+    d = fetch_team_data(request.args.get("year"), request.args.get("month"),
+                        with_daily=True)
     year, month = d["year"], d["month"]
     a_score, b_score = d["scores"]["A"], d["scores"]["B"]
 
@@ -614,6 +615,11 @@ def team_image():
     weekdays = ["월", "화", "수", "목", "금", "토", "일"]
     date_label = f"{today.month}월 {today.day}일 ({weekdays[today.weekday()]})"
 
+    # 그래프는 어제 기준 최근 10일만 (오늘 제외)
+    CHART_DAYS = 10
+    today_str = today.isoformat()
+    chart_daily = [x for x in (d.get("daily") or []) if x["date"] != today_str][-CHART_DAYS:]
+
     # 편성됐지만 출석 0인 멤버도 0점으로 포함 (화면과 동일)
     def build(team):
         rows = list(d["members"][team])
@@ -632,6 +638,7 @@ def team_image():
         "winner": winner, "lead": lead,
         "a_members": build("A"),
         "b_members": build("B"),
+        "daily": chart_daily,
     })
 
     buf = io.BytesIO()
