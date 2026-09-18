@@ -9,16 +9,16 @@ import psycopg2.pool
 import threading
 from image_gen import generate_attendance_image, generate_team_image, generate_og_image
 import io
-​
+
 app = Flask(__name__)
-​
+
 DATABASE_URL = os.environ.get("DATABASE_URL")
-​
+
 # ── DB 연결 풀 ────────────────────────────────────────────────
 # 요청마다 새로 연결하면 SSL 핸드셰이크 비용(100~300ms)이 매번 발생하므로 풀을 사용
 _pool = None
 _pool_lock = threading.Lock()
-​
+
 def _get_pool():
     global _pool
     if _pool is None:
@@ -28,7 +28,7 @@ def _get_pool():
                     1, 5, DATABASE_URL, sslmode="require"
                 )
     return _pool
-​
+
 def get_db():
     """풀에서 연결을 가져옴. 끊긴 연결이면 버리고 새로 확보."""
     pool = _get_pool()
@@ -49,7 +49,7 @@ def get_db():
                 pass
     # 풀이 계속 실패하면 직접 연결로 폴백
     return psycopg2.connect(DATABASE_URL, sslmode="require")
-​
+
 def release_db(conn):
     """연결을 풀에 반납 (닫지 않음)."""
     if conn is None:
@@ -65,7 +65,7 @@ def release_db(conn):
             conn.close()
         except Exception:
             pass
-​
+
 def init_db():
     conn = get_db()
     cur = conn.cursor()
@@ -87,7 +87,7 @@ def init_db():
     conn.commit()
     cur.close()
     release_db(conn)
-​
+
 def remove_emoji(text):
     emoji_pattern = re.compile("["
                                u"\U0001F600-\U0001F64F"
@@ -101,14 +101,14 @@ def remove_emoji(text):
                                u"\u2700-\u27BF"
                                "]+", flags=re.UNICODE)
     return emoji_pattern.sub('', text).strip()
-​
+
 def parse_kakao_message(text):
     lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
-​
+
     # 첫 번째 줄에서 날짜 추출 (이모티콘 제거 후)
     parsed_date = date.today().isoformat()
     names_lines = lines
-​
+
     if lines:
         first_line = remove_emoji(lines[0])
         date_match = re.search(r'(\d{2,4})[.\s]+(\d{1,2})[.\s]+(\d{1,2})', first_line)
@@ -118,15 +118,15 @@ def parse_kakao_message(text):
                 y = "20" + y
             parsed_date = f"{y}-{int(m):02d}-{int(d):02d}"
             names_lines = lines[1:]  # 첫 줄 제외하고 나머지가 이름
-​
+
     # 둘째 줄부터 이름 파싱 (이모티콘 제거 후 콤마 구분)
     names_text = ",".join(names_lines)
     names_text = remove_emoji(names_text)
     raw_names = [n.strip() for n in re.split(r'[,،、]', names_text) if n.strip()]
     names = [n for n in raw_names if n and not re.match(r'^[\d\s().월화수목금토일(금)(월)(화)(수)(목)(토)(일)출석부]+$', n)]
-​
+
     return parsed_date, names
-​
+
 def get_all_streaks(cur):
     cur.execute("SELECT member_id, date FROM attendance ORDER BY member_id, date DESC")
     rows = cur.fetchall()
@@ -145,7 +145,7 @@ def get_all_streaks(cur):
                 break
         streaks[mid] = streak
     return streaks
-​
+
 def find_member_id(name, cur):
     # 1단계 - 정확히 일치 (비활성 멤버는 제외)
     cur.execute("SELECT id FROM members WHERE name=%s AND active = TRUE", (name,))
@@ -162,10 +162,10 @@ def find_member_id(name, cur):
     if row:
         return row[0]
     return None
-​
+
 # OG 이미지 디자인이 바뀌면 이 값을 올려서 카카오톡 캐시를 무효화
 OG_VERSION = "3"
-​
+
 @app.route("/")
 def index():
     today = date.today().isoformat()
@@ -173,12 +173,12 @@ def index():
     base = (os.environ.get("APP_URL", "") or "").rstrip("/")
     og_image = f"{base}/og-image?date={today}&v={OG_VERSION}"
     return render_template("index.html", today=today, og_image=og_image, app_url=base)
-​
+
 # UptimeRobot ping 엔드포인트 (슬립 방지)
 @app.route("/ping")
 def ping():
     return "pong", 200
-​
+
 @app.route("/api/today")
 def api_today():
     target = request.args.get("date", date.today().isoformat())
@@ -190,12 +190,12 @@ def api_today():
                 WHERE a.date = %s AND m.active = TRUE ORDER BY m.name
                 """, (target,))
     present = [r["name"] for r in cur.fetchall()]
-​
+
     cur.execute("SELECT name FROM members WHERE active = TRUE ORDER BY name")
     all_members = [r["name"] for r in cur.fetchall()]
     cur.close()
     release_db(conn)
-​
+
     absent = [n for n in all_members if n not in present]
     return jsonify({
         "date": target,
@@ -204,7 +204,7 @@ def api_today():
         "total": len(all_members),
         "count": len(present)
     })
-​
+
 @app.route("/api/months")
 def api_months():
     conn = get_db()
@@ -217,7 +217,7 @@ def api_months():
         now = date.today()
         months = [f"{now.year}-{now.month:02d}"]
     return jsonify(months)
-​
+
 @app.route("/api/monthly")
 def api_monthly():
     now = date.today()
@@ -226,12 +226,12 @@ def api_monthly():
     last_day = calendar.monthrange(year, month)[1]
     start = f"{year}-{month:02d}-01"
     end = f"{year}-{month:02d}-{last_day}"
-​
+
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("SELECT id, name FROM members WHERE active = TRUE ORDER BY id")
     members = cur.fetchall()
-​
+
     cur.execute("""
                 SELECT m.name, a.date::text FROM attendance a
                                                      JOIN members m ON a.member_id = m.id
@@ -241,10 +241,10 @@ def api_monthly():
     att_map = {}
     for r in records:
         att_map.setdefault(r["name"], set()).add(r["date"])
-​
+
     # 연속 출석 일괄 계산 (쿼리 1회)
     streak_map = get_all_streaks(cur)
-​
+
     # 올해 총 출석일수 조회 (쿼리 1회)
     cur.execute("""
                 SELECT m.id, COUNT(*) as yearly FROM attendance a
@@ -253,7 +253,7 @@ def api_monthly():
                 GROUP BY m.id
                 """, (year,))
     yearly_map = {r["id"]: r["yearly"] for r in cur.fetchall()}
-​
+
     result = []
     for m in members:
         dates = sorted(att_map.get(m["name"], []))
@@ -265,7 +265,7 @@ def api_monthly():
     release_db(conn)
     result.sort(key=lambda x: (-x["count"], -x["yearly"], x["name"]))
     return jsonify(result)
-​
+
 @app.route("/api/yearly")
 def api_yearly():
     year = int(request.args.get("year", date.today().year))
@@ -273,7 +273,7 @@ def api_yearly():
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("SELECT id, name FROM members WHERE active = TRUE ORDER BY id")
     members = cur.fetchall()
-​
+
     cur.execute("""
                 SELECT m.id, m.name, COUNT(*) as cnt FROM attendance a
                                                               JOIN members m ON a.member_id = m.id
@@ -283,14 +283,14 @@ def api_yearly():
     counts = {r["id"]: {"name": r["name"], "count": r["cnt"]} for r in cur.fetchall()}
     cur.close()
     release_db(conn)
-​
+
     result = []
     for m in members:
         cnt = counts.get(m["id"], {}).get("count", 0)
         result.append({"name": m["name"], "count": cnt})
     result.sort(key=lambda x: (-x["count"], x["name"]))
     return jsonify(result)
-​
+
 @app.route("/api/aliases")
 def api_aliases():
     conn = get_db()
@@ -304,7 +304,7 @@ def api_aliases():
     cur.close()
     release_db(conn)
     return jsonify([dict(r) for r in rows])
-​
+
 @app.route("/api/aliases/add", methods=["POST"])
 def api_alias_add():
     data = request.json
@@ -331,7 +331,7 @@ def api_alias_add():
     cur.close()
     release_db(conn)
     return jsonify({"ok": True})
-​
+
 @app.route("/api/aliases/delete", methods=["POST"])
 def api_alias_delete():
     data = request.json
@@ -343,7 +343,7 @@ def api_alias_delete():
     cur.close()
     release_db(conn)
     return jsonify({"ok": True})
-​
+
 @app.route("/api/members")
 def api_members():
     conn = get_db()
@@ -353,7 +353,7 @@ def api_members():
     cur.close()
     release_db(conn)
     return jsonify(members)
-​
+
 @app.route("/api/members/add", methods=["POST"])
 def api_member_add():
     data = request.json
@@ -374,7 +374,7 @@ def api_member_add():
     cur.close()
     release_db(conn)
     return jsonify({"ok": True, "id": new_id, "name": name})
-​
+
 @app.route("/api/members/rename", methods=["POST"])
 def api_member_rename():
     data = request.json
@@ -395,7 +395,7 @@ def api_member_rename():
     cur.close()
     release_db(conn)
     return jsonify({"ok": True})
-​
+
 @app.route("/api/members/delete", methods=["POST"])
 def api_member_delete():
     data = request.json
@@ -409,7 +409,7 @@ def api_member_delete():
     cur.close()
     release_db(conn)
     return jsonify({"ok": True})
-​
+
 @app.route("/api/team/assign", methods=["POST"])
 def api_team_assign():
     """팀 직접 지정 저장. 해당 월 배정을 통째로 덮어씀 (재편성 가능)
@@ -419,7 +419,7 @@ def api_team_assign():
     year = int(data.get("year", now.year))
     month = int(data.get("month", now.month))
     assignments = data.get("assignments", [])
-​
+
     # 유효성 검사 ('A'/'B' 아닌 값은 버림)
     cleaned = []
     for a in assignments:
@@ -428,10 +428,10 @@ def api_team_assign():
         if not mid or team not in ("A", "B"):
             continue
         cleaned.append((int(mid), team))
-​
+
     if not cleaned:
         return jsonify({"error": "팀에 지정된 멤버가 없어요"}), 400
-​
+
     conn = get_db()
     cur = conn.cursor()
     # 기존 배정 삭제 후 재삽입 (미참가로 바뀐 멤버도 함께 정리됨)
@@ -444,11 +444,11 @@ def api_team_assign():
     conn.commit()
     cur.close()
     release_db(conn)
-​
+
     a_cnt = sum(1 for _, t in cleaned if t == "A")
     return jsonify({"ok": True, "year": year, "month": month,
                     "pok": a_cnt, "hell": len(cleaned) - a_cnt})
-​
+
 @app.route("/api/team/clear", methods=["POST"])
 def api_team_clear():
     """해당 월 팀 편성 전체 삭제"""
@@ -456,7 +456,7 @@ def api_team_clear():
     now = date.today()
     year = int(data.get("year", now.year))
     month = int(data.get("month", now.month))
-​
+
     conn = get_db()
     cur = conn.cursor()
     cur.execute("DELETE FROM team_assignments WHERE year=%s AND month=%s", (year, month))
@@ -464,21 +464,21 @@ def api_team_clear():
     cur.close()
     release_db(conn)
     return jsonify({"ok": True, "year": year, "month": month})
-​
+
 def fetch_team_data(req_y=None, req_m=None, with_daily=False):
     """팀전 데이터 조회 (API·이미지 공용). 연결 1회로 목록·편성·점수를 모두 가져옴.
     with_daily=True 이면 최근 7일 팀별 출석률도 함께 반환 (화면 그래프용)."""
     now = date.today()
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-​
+
     # 편성이 있는 달 목록
     cur.execute("""
                 SELECT DISTINCT year, month FROM team_assignments
                 ORDER BY year DESC, month DESC
                 """)
     months = [{"year": r["year"], "month": r["month"]} for r in cur.fetchall()]
-​
+
     # 조회 대상 월 결정
     if req_y and req_m:
         year, month = int(req_y), int(req_m)
@@ -488,11 +488,11 @@ def fetch_team_data(req_y=None, req_m=None, with_daily=False):
         year, month = months[0]["year"], months[0]["month"]
     else:
         year, month = now.year, now.month
-​
+
     last_day = calendar.monthrange(year, month)[1]
     start = f"{year}-{month:02d}-01"
     end = f"{year}-{month:02d}-{last_day}"
-​
+
     # 편성 현황 (비활성 멤버 제외)
     cur.execute("""
                 SELECT ta.member_id, m.name, ta.team
@@ -502,7 +502,7 @@ def fetch_team_data(req_y=None, req_m=None, with_daily=False):
                 ORDER BY ta.team, m.name
                 """, (year, month))
     assignments = [dict(r) for r in cur.fetchall()]
-​
+
     # 점수 (출석 1회당 1점) — 전체 행을 받지 않고 DB에서 집계
     cur.execute("""
                 SELECT m.name, ta.team, COUNT(*) as score
@@ -515,7 +515,7 @@ def fetch_team_data(req_y=None, req_m=None, with_daily=False):
                 ORDER BY score DESC, m.name
                 """, (year, month, start, end))
     score_rows = cur.fetchall()
-​
+
     # 일별 팀 출석률 (화면 그래프용) — 이번 달 1일부터 오늘까지
     # (기본 화면은 어제까지 보이고, 오른쪽으로 밀면 오늘도 확인 가능)
     daily = []
@@ -541,7 +541,7 @@ def fetch_team_data(req_y=None, req_m=None, with_daily=False):
             for r in cur.fetchall():
                 key = r["date"].isoformat() if hasattr(r["date"], "isoformat") else str(r["date"])
                 day_map.setdefault(key, {})[r["team"]] = r["cnt"]
-​
+
             size_a = sum(1 for a in assignments if a["team"] == "A")
             size_b = sum(1 for a in assignments if a["team"] == "B")
             wd = ["월", "화", "수", "목", "금", "토", "일"]
@@ -559,16 +559,16 @@ def fetch_team_data(req_y=None, req_m=None, with_daily=False):
                     "a_rate": round(ca / size_a * 100) if size_a else 0,
                     "b_rate": round(cb / size_b * 100) if size_b else 0,
                 })
-​
+
     cur.close()
     release_db(conn)
-​
+
     scores = {"A": 0, "B": 0}
     members = {"A": [], "B": []}
     for r in score_rows:
         scores[r["team"]] += r["score"]
         members[r["team"]].append({"name": r["name"], "score": r["score"]})
-​
+
     return {
         "year": year,
         "month": month,
@@ -582,13 +582,13 @@ def fetch_team_data(req_y=None, req_m=None, with_daily=False):
             t["year"] == now.year and t["month"] == now.month for t in months
         ),
     }
-​
+
 @app.route("/api/team/all")
 def api_team_all():
     """팀전 화면에 필요한 모든 데이터를 한 번에 반환"""
     return jsonify(fetch_team_data(request.args.get("year"), request.args.get("month"),
                                    with_daily=True))
-​
+
 @app.route("/team-image")
 def team_image():
     """팀전 화면과 동일한 레이아웃의 PNG 반환 (저장/공유용)"""
@@ -596,11 +596,11 @@ def team_image():
                         with_daily=True)
     year, month = d["year"], d["month"]
     a_score, b_score = d["scores"]["A"], d["scores"]["B"]
-​
+
     today = date.today()
     is_cur = (year == today.year and month == today.month)
     last_day = calendar.monthrange(year, month)[1]
-​
+
     if a_score > b_score:
         winner, verb, diff = "A", ("리드" if is_cur else "승리"), a_score - b_score
         lead = f"A팀 {diff}점 {verb}"
@@ -609,21 +609,21 @@ def team_image():
         lead = f"B팀 {diff}점 {verb}"
     else:
         winner, lead = None, "동점"
-​
+
     if is_cur:
         left = last_day - today.day
         badge = f"{left}일 남음" if left > 0 else "마지막 날"
     else:
         badge = "종료"
-​
+
     weekdays = ["월", "화", "수", "목", "금", "토", "일"]
     date_label = f"{today.month}월 {today.day}일 ({weekdays[today.weekday()]})"
-​
+
     # 그래프는 어제 기준 최근 10일만 (오늘 제외)
     CHART_DAYS = 10
     today_str = today.isoformat()
     chart_daily = [x for x in (d.get("daily") or []) if x["date"] != today_str][-CHART_DAYS:]
-​
+
     # 편성됐지만 출석 0인 멤버도 0점으로 포함 (화면과 동일)
     def build(team):
         rows = list(d["members"][team])
@@ -633,7 +633,7 @@ def team_image():
                 rows.append({"name": a["name"], "score": 0})
         rows.sort(key=lambda x: -x["score"])
         return rows
-​
+
     img = generate_team_image({
         "month_label": f"{year}년 {month}월",
         "days_badge": badge,
@@ -644,7 +644,7 @@ def team_image():
         "b_members": build("B"),
         "daily": chart_daily,
     })
-​
+
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
@@ -653,7 +653,7 @@ def team_image():
         return send_file(buf, mimetype="image/png")
     return send_file(buf, mimetype="image/png", as_attachment=True,
                      download_name=f"team_{year}-{month:02d}.png")
-​
+
 @app.route("/api/team/months")
 def api_team_months():
     """팀 배정이 존재하는 달 목록 (최신순)"""
@@ -667,14 +667,14 @@ def api_team_months():
     cur.close()
     release_db(conn)
     return jsonify(months)
-​
+
 @app.route("/api/team/assignments")
 def api_team_assignments():
     """현재 달 팀 배정 현황"""
     now = date.today()
     year = int(request.args.get("year", now.year))
     month = int(request.args.get("month", now.month))
-​
+
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
@@ -688,7 +688,7 @@ def api_team_assignments():
     cur.close()
     release_db(conn)
     return jsonify([dict(r) for r in rows])
-​
+
 @app.route("/api/team/score")
 def api_team_score():
     """이번 달 팀별 점수 (출석 1회당 1점)"""
@@ -698,10 +698,10 @@ def api_team_score():
     last_day = calendar.monthrange(year, month)[1]
     start = f"{year}-{month:02d}-01"
     end = f"{year}-{month:02d}-{last_day}"
-​
+
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-​
+
     # 해당 달 출석 + 팀 배정 JOIN
     cur.execute("""
                 SELECT m.name, ta.team, a.date
@@ -714,10 +714,10 @@ def api_team_score():
     rows = cur.fetchall()
     cur.close()
     release_db(conn)
-​
+
     team_scores = {"A": 0, "B": 0}
     team_members = {"A": {}, "B": {}}
-​
+
     for r in rows:
         point = 1  # 요일 구분 없이 출석 1회당 1점
         team = r["team"]
@@ -726,7 +726,7 @@ def api_team_score():
         if name not in team_members[team]:
             team_members[team][name] = 0
         team_members[team][name] += point
-​
+
     return jsonify({
         "year": year,
         "month": month,
@@ -736,13 +736,13 @@ def api_team_score():
             for team, members in team_members.items()
         }
     })
-​
+
 @app.route("/api/checkin", methods=["POST"])
 def api_checkin():
     data = request.json
     text = data.get("text", "")
     parsed_date, names = parse_kakao_message(text)
-​
+
     conn = get_db()
     cur = conn.cursor()
     matched, unmatched = [], []
@@ -762,26 +762,26 @@ def api_checkin():
     conn.commit()
     cur.close()
     release_db(conn)
-​
+
     try:
         generate_attendance_image(parsed_date)
     except:
         pass
-​
+
     return jsonify({"date": parsed_date, "matched": matched, "unmatched": unmatched})
-​
+
 @app.route("/api/share-text")
 def api_share_text():
     target = request.args.get("date", date.today().isoformat())
     dt = datetime.strptime(target, "%Y-%m-%d")
-​
+
     last_day = calendar.monthrange(dt.year, dt.month)[1]
     m_start = f"{dt.year}-{dt.month:02d}-01"
     m_end = f"{dt.year}-{dt.month:02d}-{last_day}"
-​
+
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-​
+
     # 이번 달 출석 순위 TOP 3
     cur.execute("""
                 SELECT m.name, COUNT(*) as cnt FROM attendance a
@@ -790,7 +790,7 @@ def api_share_text():
                 GROUP BY m.id, m.name ORDER BY cnt DESC, m.name LIMIT 3
                 """, (m_start, m_end))
     top = cur.fetchall()
-​
+
     # 해당 날짜가 속한 달의 팀전 점수 (출석 1회당 1점)
     cur.execute("""
                 SELECT ta.team, COUNT(*) as pts
@@ -802,14 +802,14 @@ def api_share_text():
                 GROUP BY ta.team
                 """, (dt.year, dt.month, m_start, m_end))
     team_rows = cur.fetchall()
-​
+
     cur.close()
     release_db(conn)
-​
+
     weekdays = ["월","화","수","목","금","토","일"]
     day_str = f"{dt.month}월 {dt.day}일({weekdays[dt.weekday()]})"
     top_str = " | ".join([f"{i+1}위 {r['name']} {r['cnt']}회" for i, r in enumerate(top)])
-​
+
     # 팀전 블록 (편성이 없으면 생략)
     team_block = ""
     if team_rows:
@@ -823,17 +823,17 @@ def api_share_text():
             lead = "🤝 동점"
         team_block = f"""⚔️ {dt.month}월 팀전
 A팀 {a_pts} : {b_pts} B팀 — {lead}
-​
+
 """
-​
+
     text = f"""📋 폭헬방 출석부 — {day_str}
-​
+
 {team_block}🏆 {dt.month}월 순위
 {top_str}
-​
+
 🔗 전체 출석부: {os.environ.get('APP_URL', '')}"""
     return jsonify({"text": text})
-​
+
 def _png_response(img, no_store=True):
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -845,7 +845,7 @@ def _png_response(img, no_store=True):
         resp.headers["Pragma"] = "no-cache"
         resp.headers["Expires"] = "0"
     return resp
-​
+
 @app.route("/og-image")
 def og_image():
     """카카오톡 링크 미리보기 이미지 (날짜 + 이번 달 순위 TOP3).
@@ -855,11 +855,11 @@ def og_image():
         dt = datetime.strptime(target, "%Y-%m-%d")
     except ValueError:
         dt = datetime.combine(date.today(), datetime.min.time())
-​
+
     last_day = calendar.monthrange(dt.year, dt.month)[1]
     m_start = f"{dt.year}-{dt.month:02d}-01"
     m_end = f"{dt.year}-{dt.month:02d}-{last_day}"
-​
+
     top = []
     try:
         conn = get_db()
@@ -875,7 +875,7 @@ def og_image():
         release_db(conn)
     except Exception:
         pass
-​
+
     weekdays = ["월", "화", "수", "목", "금", "토", "일"]
     try:
         img = generate_og_image({
@@ -886,7 +886,7 @@ def og_image():
         return _png_response(img)
     except Exception:
         return "", 404
-​
+
 if __name__ == "__main__":
     init_db()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
