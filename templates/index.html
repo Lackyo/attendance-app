@@ -85,9 +85,9 @@
   <div class="date" id="header-date"></div>
 </div>
 <div class="tabs">
-  <div class="tab" onclick="switchTab('admin')">출석입력</div>
+  <div class="tab active" onclick="switchTab('admin')">출석입력</div>
   <div class="tab" onclick="switchTab('today')">어제</div>
-  <div class="tab active" onclick="switchTab('team')">팀전</div>
+  <div class="tab" id="tab-team-btn" onclick="switchTab('team')" style="display:none">팀전</div>
   <div class="tab" onclick="switchTab('ranking')">랭킹</div>
   <div class="tab" onclick="switchTab('monthly')">출석표</div>
   <div class="tab" onclick="switchTab('alias')">별명관리</div>
@@ -144,7 +144,7 @@
   <div id="monthly-tables"></div>
 </div>
 
-<div class="content" id="tab-admin">
+<div class="content active" id="tab-admin">
   <div class="card">
     <div class="sec-title" style="margin-bottom:8px">📋 카카오톡 출석 메시지 붙여넣기</div>
     <textarea class="paste-area" id="kakao-text" placeholder="예시)
@@ -170,7 +170,7 @@
 
 <!-- 관리자 탭 -->
 <!-- 팀전 탭 -->
-<div class="content active" id="tab-team">
+<div class="content" id="tab-team">
   <div id="team-score-board"></div>
   <div id="team-member-board"></div>
   <div id="team-daily-board"></div>
@@ -211,8 +211,9 @@
     </button>
     <button onclick="clearTeamAssign()"
             style="width:100%;padding:9px;background:#FDECEA;color:#C0392B;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-top:6px">
-      이 달 편성 삭제
+      이 달 팀전 없음 (편성 삭제)
     </button>
+    <div id="team-status" style="font-size:11px;text-align:center;margin-top:10px;line-height:1.5"></div>
   </div>
   <div class="card">
     <div class="sec-title" style="margin-bottom:6px">📅 팀전 조회 월</div>
@@ -704,17 +705,50 @@
   let teamMonths = [];
   let teamMonthIdx = 0;
 
+  // 팀전 탭 노출 제어
+  // 이번 달 편성이 있으면 모두에게, 없으면 관리자 모드에서만 보임
+  let teamActiveThisMonth = false;
+  let teamTabInitDone = false;
+
+  function refreshTeamTab() {
+    const btn = document.getElementById("tab-team-btn");
+    if (!btn) return;
+    const adminOn = document.getElementById("tab-mgmt-btn").style.display !== "none";
+    const visible = teamActiveThisMonth || adminOn;
+    btn.style.display = visible ? "" : "none";
+
+    // 관리자 패널 상태 안내
+    const st = document.getElementById("team-status");
+    if (st) {
+      st.innerHTML = teamActiveThisMonth
+        ? '<span style="color:#1D9E75;font-weight:700">● 이번 달 팀전 진행 중</span><br><span style="color:#bbb">모두에게 팀전 탭이 보입니다</span>'
+        : '<span style="color:#aaa;font-weight:700">○ 이번 달 팀전 없음</span><br><span style="color:#bbb">팀전 탭은 관리자 모드에서만 보입니다</span>';
+    }
+
+    // 숨겨야 하는데 현재 팀전 탭을 보고 있으면 출석입력으로 이동
+    const teamOpen = document.getElementById("tab-team").classList.contains("active");
+    if (!visible && teamOpen) switchTab("admin");
+
+    // 팀전이 진행 중이면 첫 진입 시 팀전 탭을 기본으로
+    if (visible && teamActiveThisMonth && !teamTabInitDone) {
+      teamTabInitDone = true;
+      switchTab("team");
+    }
+  }
+
   async function loadTeam() {
     // 통합 API 1회 호출 (목록 + 편성 + 점수)
     const res = await fetch("/api/team/all");
     const d = await res.json();
 
+    teamActiveThisMonth = !!d.current_month_active;
     teamMonths = d.months.length ? d.months : [{year: d.year, month: d.month}];
     const i = teamMonths.findIndex(t => t.year === d.year && t.month === d.month);
     teamMonthIdx = i >= 0 ? i : 0;
 
     renderTeamMonthSelect();
     paintTeam(d);
+    refreshTeamTab();
   }
 
   function renderTeamMonthSelect() {
@@ -1168,6 +1202,7 @@
     if (pinValue === ADMIN_PIN) {
       document.getElementById("pin-modal").style.display = "none";
       document.getElementById("tab-mgmt-btn").style.display = "";
+      refreshTeamTab();
       showToast("🔓 관리자 모드 활성화");
       switchTab("mgmt");
     } else {
@@ -1181,6 +1216,7 @@
     document.getElementById("tab-mgmt-btn").style.display = "none";
     showToast("🔒 관리자 모드 종료");
     switchTab("admin");
+    refreshTeamTab();
   }
 
   async function loadMgmtMembers() {
