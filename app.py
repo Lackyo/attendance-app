@@ -465,6 +465,7 @@ def api_team_clear():
     release_db(conn)
     return jsonify({"ok": True, "year": year, "month": month})
 
+
 def fetch_team_data(req_y=None, req_m=None, with_daily=False):
     """팀전 데이터 조회 (API·이미지 공용). 연결 1회로 목록·편성·점수를 모두 가져옴.
     with_daily=True 이면 최근 7일 팀별 출석률도 함께 반환 (화면 그래프용)."""
@@ -577,7 +578,7 @@ def fetch_team_data(req_y=None, req_m=None, with_daily=False):
         "scores": scores,
         "members": members,
         "daily": daily,
-        # 이번 달(오늘 기준) 팀전 진행 여부 — 팀전 탭 노출 판단용
+        # 이번 달(오늘 기준) 팀전 편성 여부 — 팀전 탭 노출 판단용
         "current_month_active": any(
             t["year"] == now.year and t["month"] == now.month for t in months
         ),

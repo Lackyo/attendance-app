@@ -211,7 +211,7 @@
     </button>
     <button onclick="clearTeamAssign()"
             style="width:100%;padding:9px;background:#FDECEA;color:#C0392B;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-top:6px">
-      이 달 팀전 없음 (편성 삭제)
+      이 달 편성 삭제
     </button>
     <div id="team-status" style="font-size:11px;text-align:center;margin-top:10px;line-height:1.5"></div>
   </div>
@@ -706,7 +706,7 @@
   let teamMonthIdx = 0;
 
   // 팀전 탭 노출 제어
-  // 이번 달 편성이 있으면 모두에게, 없으면 관리자 모드에서만 보임
+  // 이번 달 편성이 있으면 모두에게 보이고, 없으면 관리자 모드에서만 보임
   let teamActiveThisMonth = false;
   let teamTabInitDone = false;
 
@@ -722,7 +722,7 @@
     if (st) {
       st.innerHTML = teamActiveThisMonth
         ? '<span style="color:#1D9E75;font-weight:700">● 이번 달 팀전 진행 중</span><br><span style="color:#bbb">모두에게 팀전 탭이 보입니다</span>'
-        : '<span style="color:#aaa;font-weight:700">○ 이번 달 팀전 없음</span><br><span style="color:#bbb">팀전 탭은 관리자 모드에서만 보입니다</span>';
+        : '<span style="color:#aaa;font-weight:700">○ 이번 달 팀전 없음</span><br><span style="color:#bbb">편성을 저장하면 팀전 탭이 나타나요</span>';
     }
 
     // 숨겨야 하는데 현재 팀전 탭을 보고 있으면 출석입력으로 이동
@@ -737,7 +737,7 @@
   }
 
   async function loadTeam() {
-    // 통합 API 1회 호출 (목록 + 편성 + 점수)
+    // 통합 API 1회 호출 (목록 + 편성 + 점수 + 노출 설정)
     const res = await fetch("/api/team/all");
     const d = await res.json();
 
